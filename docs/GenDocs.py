@@ -8,7 +8,8 @@ with open('../README.md', 'r') as fw:
 
 with open('pyNLControl_Manual.md', 'w') as fw:
     fw.write(readme_content + "\n\n")
-    fw.write(pdoc.text("pyNLControl.BasicUtils"))
+    fw.write(pdoc.text("pyNLControl.BasicUtils") + "\n\n")
+    fw.write(pdoc.text("pyNLControl.Estimation"))
 
 
 # input_filename = 'pyNLControl_Manual.md'
