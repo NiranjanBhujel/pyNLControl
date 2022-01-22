@@ -4,7 +4,8 @@ pyNLControl is the package for nonlinear control and estimation. It is python ba
 
 ## Requirements
 * python >= 3.6 (might work on older version of python3, not tested)
-* casadi>=3.5.5 and jinja2>=3.0.2
+* casadi>=3.5.5 and jinja2>=3.0.2 `pip install casadi jinja2 `
+
 
 ## Installations
 
