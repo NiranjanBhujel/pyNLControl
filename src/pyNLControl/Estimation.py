@@ -9,9 +9,9 @@ def KF(nX, nU, nY, Ad, Bd, Cd, Qw, Rv):
         nX (int): Number of state variables
         nU (int): Number of control inputs
         nY (int): Number of measurement outputs
-        Ad (numpy.2darray or casadi.SX array): State matrix of the system
-        Bd (numpy.2darray or casadi.SX array): Input matrix of the system
-        Cd (numpy.2darray or casadi.SX array): Measurement matrix of the system
+        Ad (numpy.2darray or casadi.SX array): Discrete-time state matrix of the system
+        Bd (numpy.2darray or casadi.SX array): Discrete-time input matrix of the system
+        Cd (numpy.2darray or casadi.SX array): Discrete-time measurement matrix of the system
         Qw (numpy.2darray or casadi.SX array): Process noise covariance matrix
         Rv (numpy.2darray or casadi.SX array): Measurement noise covariance matrix
 
