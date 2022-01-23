@@ -38,7 +38,7 @@ void {{FileName}}_Call_Func({%for xin in Func_In%}casadi_real *{{xin}}, {%endfor
     {#Assign output value#}
     {%set StartOut = namespace(value=0)%}
     {%for k in range(NumOut)%}
-    for (i = {{StartIn.value+StartOut.value}}; i < {{StartIn.value+StartOut.value + SizeIn[loop.index0]}}; i++)
+    for (i = {{StartIn.value+StartOut.value}}; i < {{StartIn.value+StartOut.value + SizeOut[loop.index0]}}; i++)
         {{Func_Out[loop.index0]}}[i-{{StartIn.value+StartOut.value}}] = w[i];
     {%set StartOut.value = StartOut.value + SizeOut[loop.index0]%}
     {%endfor%}
