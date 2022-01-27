@@ -5,7 +5,7 @@ import sys
 from jinja2 import Environment, FileSystemLoader
 
 
-def Gen_Code(func, filename, dir='/', mex=False, printhelp=False):
+def Gen_Code(func, filename, dir='/', mex=False, printhelp=False, optim=False):
     """Function to generate c code (casadi generated as well as interface) for casadi function.
 
     Args:
@@ -48,6 +48,12 @@ def Gen_Code(func, filename, dir='/', mex=False, printhelp=False):
         for k in range(len(Out)):
             SizeOut.append(func.size_out(k)[0]*func.size_out(k)[1])
 
+        totalIOsize = 0
+        for k in range(len(In)):
+            totalIOsize += func.size_in(k)[0]*func.size_in(k)[1]
+        for k in range(len(Out)):
+            totalIOsize += func.size_out(k)[0]*func.size_out(k)[1]
+
         # template rendering
         templatePath = f"{os.path.dirname(os.path.realpath(__file__))}/templates"
 
@@ -65,7 +71,7 @@ def Gen_Code(func, filename, dir='/', mex=False, printhelp=False):
             arg_size=func.sz_arg(),
             res_size=func.sz_res(),
             iw_size=func.sz_iw(),
-            w_size=func.sz_w(),
+            w_size=func.sz_w() + int(optim)*totalIOsize,
             SizeIn=SizeIn,
             SizeOut=SizeOut,
         )
@@ -208,3 +214,49 @@ def Integrate(odefun, method, Ts, x0, u0, *args):
         print(f'Error: No integrator method {method} found.')
         sys.exit(1)
     return xf
+
+
+def nlp2GGN(z, J, g, lbg, ubg, p):
+    """Converts provided nonlinear programming into quadratic form using generalized Gauss-Newton method.
+
+    Args:
+        z (casadi.SX): Vector of unknown variables of optimization problem
+        J (casadi.SX): Object function of the optimization problem
+        g (casadi.SX): Vector of constraints function
+        lbg (casadi.SX): Vector of lower limits on constraint function
+        ubg (casadi.SX): Vector of upper limits on constraint function
+        p (casadi.SX): Vector of input to the optimization problem
+
+    Returns:
+        dict: Dictionary of optimization problem.
+              keywords
+              x: Vector of decision variables 
+              f: New quadratic cost function
+              g: New constraint function
+              lbg: Lower limits on constraint function
+              ubg: Upper limits on constraint function
+
+    """
+    zOp = ca.SX.sym('zOp', z.shape)
+
+    Jnew = ca.substitute(J, z, zOp) + ca.substitute(ca.jacobian(J, z), z, zOp) @ (z - zOp)
+
+    Cost = ca.norm_2(Jnew)**2
+
+    nlp = {
+        'x': z,
+        'f': Cost
+    }
+    
+    if g is not None:
+        gnew = ca.substitute(g, z, zOp) + ca.substitute(ca.jacobian(g, z), z, zOp) @ (z - zOp)
+        nlp['g'] = gnew
+        nlp['lbg'] = lbg
+        nlp['ubg'] = ubg
+        
+    if p is not None:
+        nlp['p'] = p
+
+    nlp['zOp'] = zOp
+
+    return nlp

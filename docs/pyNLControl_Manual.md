@@ -18,14 +18,14 @@ pip install pyNLControl
 * Control: Nonlinear Model Predictive Control will be added soon
 * Misc: Nonlinear observability analysis, Noise covariance identification will be added soon
 
-Module pyNLControl.BasicUtils
+Module pynlcontrol.BasicUtils
 =============================
 
 Functions
 ---------
 
     
-`Gen_Code(func, filename, dir='/', mex=False, printhelp=False)`
+`Gen_Code(func, filename, dir='/', mex=False, printhelp=False, optim=False)`
 :   Function to generate c code (casadi generated as well as interface) for casadi function.
     
     Args:
@@ -34,6 +34,13 @@ Functions
         dir (str, optional): Directory where codes need to be generated. Defaults to current directory.
         mex (bool, optional): Option if mex is required. Defaults to False.
         printhelp (bool, optional): Option if information about input/output and its size are to be printed . If mex is False, sfunction help is also printed. Defaults to False.
+    
+    Example:
+        import casadi as ca
+        x = ca.SX.sym('x', 2)
+        f = x[0]**2 + x[1]
+        func = ca.Function('func', [x], [f])
+        Gen_Code(func, 'func_code')
 
     
 `Gen_Test(headers, varsIn, sizeIn, varsOut, sizeOut, callFuncName, filename, dir='/')`
@@ -64,14 +71,18 @@ Functions
     Returns:
         float or casadi.SX or numpy.1darray: Next states of the system
 
-Module pyNLControl.Estimation
+    
+`nlp2GGN(z, J, g, lbg, ubg, p)`
+:
+
+Module pynlcontrol.Estimation
 =============================
 
 Functions
 ---------
 
     
-`EKF(nX, nU, ny, F, H, Qw, Rv, Ts, Integrator='rk4')`
+`EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4')`
 :   Function to implement Extended Kalman filter.
     
     Args:
@@ -120,3 +131,30 @@ Functions
             Phat: Covariance estimate at current discrete time (reshaped to column matrix)
     
             These inputs are and outputs can be mapped using `casadi.Function` which can further be code generated.
+
+    
+`simpleMHE(nX, nU, nY, nP, N, Fc, Hc, Wp, Wm, Ts, pLower=[], pUpper=[], arrival=False, GGN=False, Integrator='rk4', Options=None)`
+:   Function to generate simple MHE code using `qrqp` solver. For use with other advanced solver, see `MPC` class.
+    
+    Args:
+        nX (int): Number of state variables.
+        nU (int): number of control input.
+        nY (int): Number of measurement variables.
+        nP (int): Number of parameter to be estimated. nP=0 while performing state estimation only.
+        N (int): Horizon length.
+        Fc (function): Function that returns right hand side of state equation.
+        Hc (function): Function that returns right hand side of measurement equation.
+        Wp (float or casadi.SX array or numpy.2darray): Weight for process noise term. It is $Q_w^{-1/2}$ where $Q_w$ is process noise covariance.
+        Wm (float or casadi.SX array or numpy.2darray): Weight for measurement noise term. It is $R_v^{-1/2}$ where $R_v$ is measurement noise covariance.
+        Ts (float): Sample time for MHE
+        pLower (list, optional): List of lower limits of unknown parameters. Defaults to [].
+        pUpper (list, optional): List of upper limits of unknown parameters. Defaults to [].
+        arrival (bool, optional): Whether to include arrival cost. Defaults to False.
+        GGN (bool, optional): Whether to use GGN. Use this option only when optimization problem is nonlinear. Defaults to False.
+        Integrator (str, optional): Integration method. See `BasicUtils.Integrate()` function. Defaults to 'rk4'.
+        Options (dict, optional): Option for `qrqp` solver. Defaults to None.
+    
+    Returns:
+        tuple: tuple: Tuple of Input, Output, Input name and Output name. Input and output are list of casadi symbolics (`casadi.SX`).
+            Input should be control input and measurement data of past horizon length
+            Output are all value of decision variable, estimations of parameter, estimates of states and cost function.

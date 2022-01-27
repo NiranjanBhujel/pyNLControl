@@ -1,15 +1,15 @@
 import pdoc
 import os
 
-import pyNLControl
+import pynlcontrol
 
 with open('../README.md', 'r') as fw:
     readme_content = fw.read()
 
 with open('pyNLControl_Manual.md', 'w') as fw:
     fw.write(readme_content + "\n\n")
-    fw.write(pdoc.text("pyNLControl.BasicUtils") + "\n\n")
-    fw.write(pdoc.text("pyNLControl.Estimation"))
+    fw.write(pdoc.text("pynlcontrol.BasicUtils") + "\n\n")
+    fw.write(pdoc.text("pynlcontrol.Estimation"))
 
 
 # input_filename = 'pyNLControl_Manual.md'
