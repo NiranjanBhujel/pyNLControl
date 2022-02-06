@@ -26,6 +26,23 @@ def KF(nX, nU, nY, Ad, Bd, Cd, Qw, Rv):
 
             These inputs are and outputs can be mapped using `casadi.Function` which can further be code generated.
     """
+
+    assert isinstance(nX, int), "nX must be integer."
+    assert isinstance(nU, int), "nU must be integer."
+    assert isinstance(nY, int), "nY must be integer."
+
+    assert Qw.shape[0] == Qw.shape[1], "Qw is not square matrix."
+    assert Rv.shape[0] == Rv.shape[1], "Rv is not square matrix."
+
+    assert nX == Ad.shape[0] == Ad.shape[1], "Shape mismatch of Ad with nX."
+    assert nX == Bd.shape[0], "Shape mismatch of Bd with nX."
+    assert nX == Cd.shape[1], "Shape mismatch of Cd with nX."
+    assert nX == Qw.shape[0], "Shape mismatch of Qw with nX."
+
+    assert nU == Bd.shape[1], "Shape mismatch of Bd with nU."
+    assert nY == Cd.shape[0], "Shape mismatch of Cd with nY."
+    assert nY == Rv.shape[0], "Shape mismatch of Rv with nY."
+
     xp = ca.SX.sym('xp', nX, 1)
     u = ca.SX.sym('u', nU, 1)
     y = ca.SX.sym('y', nY, 1)
@@ -71,6 +88,19 @@ def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
 
             These inputs are and outputs can be mapped using `casadi.Function` which can further be code generated.
     """
+    assert isinstance(nX, int), "nX must be integer."
+    assert isinstance(nU, int), "nU must be integer."
+    assert isinstance(nY, int), "nY must be integer."
+
+    assert Qw.shape[0] == Qw.shape[1], "Qw is not square matrix."
+    assert Rv.shape[0] == Rv.shape[1], "Rv is not square matrix."
+
+    assert nX == Qw.shape[0], "Shape mismatch of Qw with nX."
+
+    assert nY == Rv.shape[0], "Shape mismatch of Rv with nY."
+
+    assert isinstance(Ts, float), "Sample time (Ts) must be float."
+
     xp = ca.SX.sym('xp', nX, 1)
     u = ca.SX.sym('u', nU, 1)
     y = ca.SX.sym('y', nY, 1)

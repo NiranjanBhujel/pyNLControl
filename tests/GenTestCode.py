@@ -1,4 +1,4 @@
-from pyNLControl import BasicUtils
+from pynlcontrol import BasicUtils
 import casadi as ca
 import numpy as np
 

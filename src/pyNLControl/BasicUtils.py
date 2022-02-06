@@ -31,7 +31,7 @@ def Gen_Code(func, filename, dir='/', mex=False, printhelp=False, optim=False):
 
     if mex:
         func.generate(f'{filename}.c', {'main': False,
-                                        'mex': True, 'with_header': False})
+                                        'mex': True, 'with_header': True})
         shutil.move(f'{filename}.c', f'{dir}{filename}.c')
         shutil.move(f'{filename}.h', f'{dir}{filename}.h')
     else:
