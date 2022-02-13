@@ -10,6 +10,7 @@ with open('pyNLControl_Manual.md', 'w') as fw:
     fw.write(readme_content + "\n\n")
     fw.write(pdoc.text("pynlcontrol.BasicUtils") + "\n\n")
     fw.write(pdoc.text("pynlcontrol.Estimation"))
+    fw.write(pdoc.text("pynlcontrol.QPInterface"))
 
 
 # input_filename = 'pyNLControl_Manual.md'
