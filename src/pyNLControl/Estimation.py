@@ -1,3 +1,8 @@
+# Filename:     Estimation.py
+# Written by:   Niranjan Bhujel
+# Description:  Contains estimators such as kalman filter, extended kalman filter and simple moving horizon estimators
+
+
 from pynlcontrol.BasicUtils import Integrate, nlp2GGN
 import casadi as ca
 

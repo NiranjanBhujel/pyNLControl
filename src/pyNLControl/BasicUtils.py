@@ -1,3 +1,9 @@
+# Filename:     BasicUtils.py
+# Written by:   Niranjan Bhujel
+# Description:  Contains basic functions such as generating interface code for casadi function,
+#               numerical integration, nlp to generalized Gauss Newton (GGN), etc.
+
+
 import casadi as ca
 import shutil
 import os
@@ -71,7 +77,7 @@ def Gen_Code(func, filename, dir='/', mex=False, printhelp=False, optim=False):
             arg_size=func.sz_arg(),
             res_size=func.sz_res(),
             iw_size=func.sz_iw(),
-            w_size=func.sz_w() + int(optim)*totalIOsize,
+            w_size=int(optim)*func.sz_w() + totalIOsize,
             SizeIn=SizeIn,
             SizeOut=SizeOut,
         )
@@ -239,7 +245,8 @@ def nlp2GGN(z, J, g, lbg, ubg, p):
     """
     zOp = ca.SX.sym('zOp', z.shape)
 
-    Jnew = ca.substitute(J, z, zOp) + ca.substitute(ca.jacobian(J, z), z, zOp) @ (z - zOp)
+    Jnew = ca.substitute(J, z, zOp) + \
+        ca.substitute(ca.jacobian(J, z), z, zOp) @ (z - zOp)
 
     Cost = ca.norm_2(Jnew)**2
 
@@ -247,16 +254,32 @@ def nlp2GGN(z, J, g, lbg, ubg, p):
         'x': z,
         'f': Cost
     }
-    
+
     if g is not None:
-        gnew = ca.substitute(g, z, zOp) + ca.substitute(ca.jacobian(g, z), z, zOp) @ (z - zOp)
+        gnew = ca.substitute(g, z, zOp) + \
+            ca.substitute(ca.jacobian(g, z), z, zOp) @ (z - zOp)
         nlp['g'] = gnew
         nlp['lbg'] = lbg
         nlp['ubg'] = ubg
-        
+
     if p is not None:
         nlp['p'] = p
 
     nlp['zOp'] = zOp
 
     return nlp
+
+
+def __SXname__(x):
+    if isinstance(x, list):
+        nameList = []
+        for tmp in x:
+            z = str(tmp)
+            z = z.split('_')
+            nameList.append(z[0])
+
+        return nameList
+    else:
+        z = str(x[0])
+        z = z.split('_')
+        return z[0]
