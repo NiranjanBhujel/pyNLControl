@@ -22,10 +22,9 @@ qp.exportCode(
     'test1',
     dir="Test1_Exported",
     printsfun=True,
-    mex=True,
+    mex=False,
     TestCode=False,
     Options={
         'max_iter': 5,
-        'enableRamping': 'BT_TRUE'
     }
 )

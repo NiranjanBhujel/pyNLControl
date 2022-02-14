@@ -8,8 +8,6 @@
 #include "test1.h"
 
 
-#include "mex.h"
-
 
 void test1_Call(double *xGuess, double *a, double *b,  double *xOpt, double *Obj)
 {
@@ -26,8 +24,6 @@ void test1_Call(double *xGuess, double *a, double *b,  double *xOpt, double *Obj
     options.setToMPC();
 
     options.printLevel = PL_NONE;
-    
-    options.enableRamping = BT_TRUE;
     
 
     SQProblem qp(nV, nC);
@@ -50,37 +46,4 @@ void test1_Call(double *xGuess, double *a, double *b,  double *xOpt, double *Obj
     Obj[0] = qp.getObjVal();
 
 
-}
-
-
-void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
-{
-    if (nrhs != 3)
-    {
-        mexErrMsgIdAndTxt("nrhs:", "3 outputs required.");
-    }
-
-    if (nlhs != 2)
-    {
-        mexErrMsgIdAndTxt("nrhs:", "2 inputs required.");
-    }
-
-    
-    plhs[0] = mxCreateDoubleMatrix(2, 1, mxREAL);
-    plhs[1] = mxCreateDoubleMatrix(1, 1, mxREAL);
-
-    double *xGuess, *a, *b;
-
-    double *xOpt, *Obj_VAL;
-
-    
-    xGuess = mxGetPr(prhs[0]);
-    a = mxGetPr(prhs[1]);
-    b = mxGetPr(prhs[2]);
-
-    
-    xOpt = mxGetPr(plhs[0]);
-    Obj_VAL = mxGetPr(plhs[1]);
-
-    test1_Call(xGuess, a, b, xOpt, Obj_VAL);
 }

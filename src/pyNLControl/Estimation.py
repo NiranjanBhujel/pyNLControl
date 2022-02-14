@@ -131,6 +131,112 @@ def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
     return [u, y, xp, Pp], [xhat, ca.reshape(Phat, nX*nX, 1)], ['u', 'y', 'xhatp', 'Pkp'], ['xhat', 'Phat']
 
 
+def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, Integrator='rk4'):
+    """Function to implement Unscented Kalman filter. If either of PCoeff or Wm or Wc is None, it calculates those values with alpha=1e-3, Beta=2 and kappa=0.
+
+    Args:
+        nX (int): Number of state variables
+        nU (int): Number of control inputs
+        ny (int): Number of measurement outputs
+        F (function): Function that returns right-hand side of state differential equation
+        H (function): Function that retuns measurement variable from state variable
+        Qw (numpy.2darray or casadi.SX array): Process noise covariance matrix
+        Rv (numpy.2darray or casadi.SX array): Measurement noise covariance matrix
+        Ts (float): Sample time of the Kalman filter.
+        PCoeff (float): Coefficient of covariance matrix (inside square root term) when calculating sigma points. Defaults to None
+        Wm (list, optional): List of weights for mean calculation. Defaults to None.
+        Wc (list, optional): List of weights for covariance calculation. Defaults to None.
+        Integrator (str, optional): Integration method. Defaults to 'rk4'. For list of supported integrator, please see documentation of function `Integrate`.
+
+    Returns:
+        tuple: Tuple of Input, Output, Input name and Output name. Inputs are u, y, xp, Pp and output are xhat and Phat. Input and output are casadi symbolics (`casadi.SX`).
+            u: Current input to the system
+            y: Current measurement of the system
+            xp: State estimate from previous discrete time
+            Pp: Covariance estimate from previous discrete time (reshaped to column matrix)
+            xhat: State estimate at current discrete time
+            Phat: Covariance estimate at current discrete time (reshaped to column matrix)
+
+            These inputs are and outputs can be mapped using `casadi.Function` which can further be code generated.
+    """
+    def SigmaMean(S, Wm):
+        N = len(Wm)
+        SMean = ca.GenSX_zeros(S.shape[0], 1)
+        for k in range(N):
+            SMean += Wm[k] * S[:, [k]]
+        return SMean
+
+
+    def SigmaCovar(S1, S2, Wm, Wc):
+        N = len(Wm)
+        SCov = ca.GenSX_zeros(S1.shape[0], S2.shape[0])
+        for k in range(N):
+            SCov += Wc[k] * (S1[:, k] - SigmaMean(S1, Wm)) @ ca.transpose((S2[:, [k]] - SigmaMean(S2, Wm)))
+        return SCov
+
+    def GenSigma(xbar, P, PCoeff):
+        nx = xbar.shape[0]
+        S = ca.GenSX_zeros((nx, 2*nx+1))
+        S[:, [0]] = xbar
+
+        L = ca.chol(P).T
+
+        for k in range(1, nx+1):
+            S[:, [k]] = xbar + (PCoeff)**0.5 * L[:, [k-1]]
+        for k in range(nx+1, 2*nx+1):
+            S[:, [k]] = xbar - (PCoeff)**0.5 * L[:, [k-nx-1]]
+
+        return S
+
+    if PCoeff is None or Wm is None or Wc is None:
+        L = nX
+        alpha = 1e-3
+        k = 0
+        beta = 2
+
+        PCoeff = alpha**2*(L+k)
+
+        W0m = 1-L/(alpha**2*(L+k))
+        Wm = [W0m] + [1/(2*alpha**2*(L+k)) for i in range(2*5)]
+
+        W0c = 2-alpha**2+beta-L/(alpha**2*(L+k))
+        Wc = [W0c] + [1/(2*alpha**2*(L+k)) for i in range(2*5)]    
+
+    xp = ca.SX.sym('xp', nX, 1)
+    u = ca.SX.sym('u', nU, 1)
+    y = ca.SX.sym('y', nY, 1)
+
+    Pp = ca.SX.sym('Pp', nX*nX, 1)
+    Ppt = ca.reshape(Pp, nX, nX)
+    Sx = GenSigma(xp, Ppt, PCoeff)
+
+    Sxkm = ca.GenSX_zeros(Sx.shape)
+
+    for i in range(2*nX+1):
+        Sxkm[:, i] = Integrate(F, Integrator, Ts, Sx[:, i], u)
+
+    mukm = SigmaMean(Sxkm, Wm)
+    Pkm = SigmaCovar(Sxkm, Sxkm, Wm, Wc) + Qw
+
+    Sy = ca.GenSX_zeros(nY, 2*nX+1)
+
+    for i in range(2*nX+1):
+        Sy[:, i] = H(Sxkm[:, i])
+
+    ykm = SigmaMean(Sy, Wm)
+    Sk = SigmaCovar(Sy, Sy, Wm, Wc) + Rv
+
+    Ck = SigmaCovar(Sxkm, Sy, Wm, Wc)
+
+    Kk = Ck @ ca.inv(Sk)
+
+    mu = mukm + Kk @ (y - ykm)
+
+    Pk = Pkm - Kk @ Sk @ Kk.T
+
+    return [u, y, xp, Pp], [mu, ca.reshape(Pk, nX*nX, 1)], ['u', 'y', 'xp', 'Pp'], ['xhat', 'Phat']
+
+
 def simpleMHE(nX, nU, nY, nP, N, Fc, Hc, Wp, Wm, Ts, pLower=[], pUpper=[], arrival=False, GGN=False, Integrator='rk4', Options=None):
     """Function to generate simple MHE code using `qrqp` solver. For use with other advanced solver, see `MPC` class.
 

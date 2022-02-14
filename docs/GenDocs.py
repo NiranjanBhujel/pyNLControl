@@ -9,7 +9,7 @@ with open('../README.md', 'r') as fw:
 with open('pyNLControl_Manual.md', 'w') as fw:
     fw.write(readme_content + "\n\n")
     fw.write(pdoc.text("pynlcontrol.BasicUtils") + "\n\n")
-    fw.write(pdoc.text("pynlcontrol.Estimation"))
+    fw.write(pdoc.text("pynlcontrol.Estimation") + "\n\n")
     fw.write(pdoc.text("pynlcontrol.QPInterface"))
 
 
