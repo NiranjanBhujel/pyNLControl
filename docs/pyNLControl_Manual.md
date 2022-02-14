@@ -34,13 +34,6 @@ Functions
         dir (str, optional): Directory where codes need to be generated. Defaults to current directory.
         mex (bool, optional): Option if mex is required. Defaults to False.
         printhelp (bool, optional): Option if information about input/output and its size are to be printed . If mex is False, sfunction help is also printed. Defaults to False.
-    
-    Example:
-        import casadi as ca
-        x = ca.SX.sym('x', 2)
-        f = x[0]**2 + x[1]
-        func = ca.Function('func', [x], [f])
-        Gen_Code(func, 'func_code')
 
     
 `Gen_Test(headers, varsIn, sizeIn, varsOut, sizeOut, callFuncName, filename, dir='/')`
@@ -73,7 +66,24 @@ Functions
 
     
 `nlp2GGN(z, J, g, lbg, ubg, p)`
-:
+:   Converts provided nonlinear programming into quadratic form using generalized Gauss-Newton method.
+    
+    Args:
+        z (casadi.SX): Vector of unknown variables of optimization problem
+        J (casadi.SX): Object function of the optimization problem
+        g (casadi.SX): Vector of constraints function
+        lbg (casadi.SX): Vector of lower limits on constraint function
+        ubg (casadi.SX): Vector of upper limits on constraint function
+        p (casadi.SX): Vector of input to the optimization problem
+    
+    Returns:
+        dict: Dictionary of optimization problem.
+              keywords
+              x: Vector of decision variables 
+              f: New quadratic cost function
+              g: New constraint function
+              lbg: Lower limits on constraint function
+              ubg: Upper limits on constraint function
 
 Module pynlcontrol.Estimation
 =============================
@@ -158,3 +168,43 @@ Functions
         tuple: tuple: Tuple of Input, Output, Input name and Output name. Input and output are list of casadi symbolics (`casadi.SX`).
             Input should be control input and measurement data of past horizon length
             Output are all value of decision variable, estimations of parameter, estimates of states and cost function.
+
+Module pynlcontrol.QPInterface
+==============================
+
+Classes
+-------
+
+`qpOASES(H, g, p=None, A=None, lbA=None, ubA=None, lbx=None, ubx=None)`
+:   Class to create interface to qpOASES solver.
+    
+    Args:
+        H (casadi.SX): Hessian matrix of cost function
+        g (casadi.SX): Linear coefficient vector of cost function
+        p (list, optional): List of input parameters to optimization problem. Defaults to None.
+        A (casadi.SX, optional): Constraint matrix. Defaults to None.
+        lbA (casadi.SX, optional): Lower bound on constraint matrix. Defaults to None.
+        ubA (casadi.SX, optional): Upper bound on constraint matrix. Defaults to None.
+        lbx (casadi.SX, optional): Lower bound on decision variables. Defaults to None.
+        ubx (casadi.SX, optional): Upper bound on decision variables. Defaults to None.
+
+    ### Methods
+
+    `exportCode(self, filename, dir='/', mex=False, printsfun=False, Options=None, TestCode=False)`
+    :   Method of class qpOASES to export the code that solves quadratic programming.
+        
+        Args:
+            filename (str): Filename for exported code.
+            dir (str, optional): Directory where code is to be exported. Defaults to '/'.
+            mex (bool, optional): Whether mex interface is required. Defaults to False.
+            printsfun (bool, optional): Whether MATLAB s-function interface is to be implemented. Defaults to False.
+            Options (dict, optional): Options for qpOASES solver. Defaults to None.
+            TestCode (bool, optional): Whether main function is required. Useful while testing and debugging. Defaults to False.
+
+    `exportEvalCode(self, funcname, dir='/', options=None)`
+    :   Method of class qpOASES to generate C code to evaluate H, h, A, lbA, ubA, lbx, ubx.
+        
+        Args:
+            funcname (str): Function to be named that evaluates H, h, A, lbA, ubA, lbx and ubx.
+            dir (str, optional): Directory where codes are to be exported. Defaults to '/'.
+            options (dict, optional): Options for code generation. Same option as casadi.Function.generate() function. Defaults to None.
