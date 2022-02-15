@@ -1,4 +1,4 @@
-# Filename:     Estimation.py
+# Filename:     Estimator.py
 # Written by:   Niranjan Bhujel
 # Description:  Contains estimators such as kalman filter, extended kalman filter and simple moving horizon estimators
 
@@ -131,7 +131,7 @@ def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
     return [u, y, xp, Pp], [xhat, ca.reshape(Phat, nX*nX, 1)], ['u', 'y', 'xhatp', 'Pkp'], ['xhat', 'Phat']
 
 
-def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, Integrator='rk4'):
+def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-3, beta=2.0, kappa=0.0, Integrator='rk4'):
     """Function to implement Unscented Kalman filter. If either of PCoeff or Wm or Wc is None, it calculates those values with alpha=1e-3, Beta=2 and kappa=0.
 
     Args:
@@ -146,6 +146,9 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, Integrator=
         PCoeff (float): Coefficient of covariance matrix (inside square root term) when calculating sigma points. Defaults to None
         Wm (list, optional): List of weights for mean calculation. Defaults to None.
         Wc (list, optional): List of weights for covariance calculation. Defaults to None.
+        alpha (float, optional): Value of alpha parameter. Defaults to 1.0e-3.
+        beta (float, optional): Value of beta parameter. Defaults to 2.0.
+        kappa (float, optional): Value of kappa parameter. Defaults to 0.0.
         Integrator (str, optional): Integration method. Defaults to 'rk4'. For list of supported integrator, please see documentation of function `Integrate`.
 
     Returns:
@@ -188,19 +191,31 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, Integrator=
 
         return S
 
+
+    assert isinstance(nX, int), "nX must be integer."
+    assert isinstance(nU, int), "nU must be integer."
+    assert isinstance(nY, int), "nY must be integer."
+
+    assert Qw.shape[0] == Qw.shape[1], "Qw is not square matrix."
+    assert Rv.shape[0] == Rv.shape[1], "Rv is not square matrix."
+
+    assert nX == Qw.shape[0], "Shape mismatch of Qw with nX."
+
+    assert nY == Rv.shape[0], "Shape mismatch of Rv with nY."
+
+    assert isinstance(Ts, float), "Sample time (Ts) must be float."
+    
+
     if PCoeff is None or Wm is None or Wc is None:
         L = nX
-        alpha = 1e-3
-        k = 0
-        beta = 2
 
-        PCoeff = alpha**2*(L+k)
+        PCoeff = alpha**2*(L+kappa)
 
-        W0m = 1-L/(alpha**2*(L+k))
-        Wm = [W0m] + [1/(2*alpha**2*(L+k)) for i in range(2*5)]
+        W0m = 1-L/(alpha**2*(L+kappa))
+        Wm = [W0m] + [1/(2*alpha**2*(L+kappa)) for i in range(2*nX)]
 
-        W0c = 2-alpha**2+beta-L/(alpha**2*(L+k))
-        Wc = [W0c] + [1/(2*alpha**2*(L+k)) for i in range(2*5)]    
+        W0c = 2-alpha**2+beta-L/(alpha**2*(L+kappa))
+        Wc = [W0c] + [1/(2*alpha**2*(L+kappa)) for i in range(2*nX)]    
 
     xp = ca.SX.sym('xp', nX, 1)
     u = ca.SX.sym('u', nU, 1)

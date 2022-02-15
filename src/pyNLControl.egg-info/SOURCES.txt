@@ -8,7 +8,8 @@ src/pyNLControl.egg-info/dependency_links.txt
 src/pyNLControl.egg-info/requires.txt
 src/pyNLControl.egg-info/top_level.txt
 src/pynlcontrol/BasicUtils.py
-src/pynlcontrol/Estimation.py
+src/pynlcontrol/Controller.py
+src/pynlcontrol/Estimator.py
 src/pynlcontrol/QPInterface.py
 src/pynlcontrol/__init__.py
 src/pynlcontrol/external/qpOASES.zip

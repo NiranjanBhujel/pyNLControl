@@ -14,8 +14,8 @@ pip install pyNLControl
 ```
 
 ## Supported control and estimator
-* Estimators: Kalman filter, Extended Kalman Filter and Unscented Kalman Filter. Partical filter, moving horizon estimator, etc will be added soon.
-* Control: Nonlinear Model Predictive Control will be added soon
+* Estimators: Kalman filter, Extended Kalman Filter, Unscented Kalman Filter and simple moving horizon estimators. Partical filter,  advanced moving horizon estimator, etc will be added soon.
+* Control: LQR only. Other controllers including nonlinear Model Predictive Control will be added soon
 * Misc: Nonlinear observability analysis, Noise covariance identification will be added soon
 
 Module pynlcontrol.BasicUtils
@@ -85,8 +85,8 @@ Functions
               lbg: Lower limits on constraint function
               ubg: Upper limits on constraint function
 
-Module pynlcontrol.Estimation
-=============================
+Module pynlcontrol.Estimator
+============================
 
 Functions
 ---------
@@ -143,6 +143,38 @@ Functions
             These inputs are and outputs can be mapped using `casadi.Function` which can further be code generated.
 
     
+`UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=0.001, beta=2.0, kappa=0.0, Integrator='rk4')`
+:   Function to implement Unscented Kalman filter. If either of PCoeff or Wm or Wc is None, it calculates those values with alpha=1e-3, Beta=2 and kappa=0.
+    
+    Args:
+        nX (int): Number of state variables
+        nU (int): Number of control inputs
+        ny (int): Number of measurement outputs
+        F (function): Function that returns right-hand side of state differential equation
+        H (function): Function that retuns measurement variable from state variable
+        Qw (numpy.2darray or casadi.SX array): Process noise covariance matrix
+        Rv (numpy.2darray or casadi.SX array): Measurement noise covariance matrix
+        Ts (float): Sample time of the Kalman filter.
+        PCoeff (float): Coefficient of covariance matrix (inside square root term) when calculating sigma points. Defaults to None
+        Wm (list, optional): List of weights for mean calculation. Defaults to None.
+        Wc (list, optional): List of weights for covariance calculation. Defaults to None.
+        alpha (float, optional): Value of alpha parameter. Defaults to 1.0e-3.
+        beta (float, optional): Value of beta parameter. Defaults to 2.0.
+        kappa (float, optional): Value of kappa parameter. Defaults to 0.0.
+        Integrator (str, optional): Integration method. Defaults to 'rk4'. For list of supported integrator, please see documentation of function `Integrate`.
+    
+    Returns:
+        tuple: Tuple of Input, Output, Input name and Output name. Inputs are u, y, xp, Pp and output are xhat and Phat. Input and output are casadi symbolics (`casadi.SX`).
+            u: Current input to the system
+            y: Current measurement of the system
+            xp: State estimate from previous discrete time
+            Pp: Covariance estimate from previous discrete time (reshaped to column matrix)
+            xhat: State estimate at current discrete time
+            Phat: Covariance estimate at current discrete time (reshaped to column matrix)
+    
+            These inputs are and outputs can be mapped using `casadi.Function` which can further be code generated.
+
+    
 `simpleMHE(nX, nU, nY, nP, N, Fc, Hc, Wp, Wm, Ts, pLower=[], pUpper=[], arrival=False, GGN=False, Integrator='rk4', Options=None)`
 :   Function to generate simple MHE code using `qrqp` solver. For use with other advanced solver, see `MPC` class.
     
@@ -168,6 +200,38 @@ Functions
         tuple: tuple: Tuple of Input, Output, Input name and Output name. Input and output are list of casadi symbolics (`casadi.SX`).
             Input should be control input and measurement data of past horizon length
             Output are all value of decision variable, estimations of parameter, estimates of states and cost function.
+
+Module pynlcontrol.Controller
+=============================
+
+Functions
+---------
+
+    
+`LQR(A, B, C, D, Q, R, Qt, Ts, horizon=inf, reftrack=False, NMAX=1000, tol=1e-05, Integrator='rk4')`
+:   Function to implement discrete-time linear quadratic regulator
+    
+    Args:
+        A (numpy.2darray or casadi.SX.array): Continuous time state matrix
+        B (numpy.2darray or casadi.SX.array): Continuous time input matrix
+        C (numpy.2darray or casadi.SX.array): Continuous time output matrix
+        D (numpy.2darray or casadi.SX.array): Continuous time output matrix coefficient of input
+        Q (numpy.2darray or casadi.SX.array): Weight to penalize control error
+        R (numpy.2darray or casadi.SX.array): Weight to penalize control effort
+        Qt (numpy.2darray or casadi.SX.array): Weight of terminal cost to penalize control effort
+        Ts (float): Sample time of controller
+        horizon (int, optional): Horizon length of LQR. Defaults to inf for infinite horizon LQR problem
+        reftrack (bool, optional): Whether problem is reference tracking. Defaults to False.
+        NMAX (int, optional): Maximum iteration for solving matrix Ricatti equation. Defaults to 1000.
+        tol (float, optional): Tolerance for solution of matrix Ricatti equation. Defaults to 1e-5.
+        Integrator (str, optional): Integrator to be used for discretization. Defaults to 'rk4'.
+    
+    Returns:
+        tuple: Tuple of Input, Output, Input name and Output name. Inputs are x or [x, r] 
+            (depending upon the problem is reference tracking or not) and output are u and K.
+            Input and output are casadi symbolics (`casadi.SX`).
+    
+            These inputs are and outputs can be mapped using `casadi.Function` which can further be code generated.
 
 Module pynlcontrol.QPInterface
 ==============================
@@ -208,3 +272,4 @@ Classes
             funcname (str): Function to be named that evaluates H, h, A, lbA, ubA, lbx and ubx.
             dir (str, optional): Directory where codes are to be exported. Defaults to '/'.
             options (dict, optional): Options for code generation. Same option as casadi.Function.generate() function. Defaults to None.
+
