@@ -7,21 +7,33 @@ from pynlcontrol.BasicUtils import Integrate, nlp2GGN
 import casadi as ca
 
 
-def KF(nX, nU, nY, Ad, Bd, Cd, Qw, Rv):
-    """Function to implement Kalman filter. 
+def KF(A, B, C, D, Qw, Rv, Ts, Integrator='rk4'):
+    """
+    Function to implement Kalman filter (KF). 
 
-    Args:
-        nX (int): Number of state variables
-        nU (int): Number of control inputs
-        nY (int): Number of measurement outputs
-        Ad (numpy.2darray or casadi.SX array): Discrete-time state matrix of the system
-        Bd (numpy.2darray or casadi.SX array): Discrete-time input matrix of the system
-        Cd (numpy.2darray or casadi.SX array): Discrete-time measurement matrix of the system
-        Qw (numpy.2darray or casadi.SX array): Process noise covariance matrix
-        Rv (numpy.2darray or casadi.SX array): Measurement noise covariance matrix
+    Parameters
+    ----------
+    A: (numpy.2darray or casadi.SX array)
+        Continuous-time state matrix of the system
+    B: (numpy.2darray or casadi.SX array)
+        Continuous-time input matrix of the system
+    C: (numpy.2darray or casadi.SX array)
+        Continuous-time measurement matrix of the system
+    D: (numpy.2darray or casadi.SX array)
+        Continuous time output matrix coefficient of input
+    Qw: (numpy.2darray or casadi.SX array)
+        Process noise covariance matrix
+    Rv: (numpy.2darray or casadi.SX array)
+        Measurement noise covariance matrix
+    Ts: (float)
+        Sample time of KF
+    Integrator: (str, optional)
+        Integrator to be used for discretization. Defaults to 'rk4'.
 
-    Returns:
-        tuple: Tuple of Input, Output, Input name and Output name. Inputs are u, y, xp, Pp and output are xhat and Phat. Input and output are casadi symbolics (`casadi.SX`).
+    Returns
+    -------
+    tuple
+        Tuple of Input, Output, Input name and Output name. Inputs are u, y, xp, Pp and output are xhat and Phat. Input and output are casadi symbolics (`casadi.SX`).
             u: Current input to the system
             y: Current measurement of the system
             xp: State estimate from previous discrete time
@@ -30,23 +42,49 @@ def KF(nX, nU, nY, Ad, Bd, Cd, Qw, Rv):
             Phat: Covariance estimate at current discrete time (reshaped to column matrix)
 
             These inputs are and outputs can be mapped using `casadi.Function` which can further be code generated.
+
+    Example
+    -------
+    >>> from pynlcontrol import Estimator, BasicUtils
+    >>> import casadi as ca
+    >>> Q11 = ca.SX.sym('Q11')
+    >>> Q22 = ca.SX.sym('Q22')
+    >>> Q33 = ca.SX.sym('Q33')
+    >>> Q = BasicUtils.directSum([Q11, Q22, Q33])
+    >>> R22 = ca.SX.sym('R22')
+    >>> R = BasicUtils.directSum([R11, R22])
+    >>> A = ca.SX([[-0.4,0.1,-2],[0,-0.3,4],[1,0,0]])
+    >>> B = ca.SX([[1,1],[0,1],[1,0]])
+    >>> C = ca.SX([[1, 0, 0], [0, 1, 0]])
+    >>> D = ca.SX([[0, 0], [0, 0]])
+    >>> In, Out, InName, OutName = Estimator.KF(A, B, C, D, Q, R, 0.1)
+    >>> KF_func = ca.Function('KF_func', In + [Q11, Q22, Q33, R11, R22], Out, InName + ['Q11', 'Q22', 'Q33', 'R11', 'R22'], OutName)
+    >>> BasicUtils.Gen_Code(KF_func, 'KF_code', printhelp=True)
+    u(2, 1), y(2, 1), xhatp(3, 1), Pkp(9, 1), Q11(1, 1), Q22(1, 1), Q33(1, 1), R11(1, 1), R22(1, 1) -> xhat(3, 1), Phat(9, 1)
+    KF_code.c
+    KF_code_Call.c
+    #include "KF_code.h"
+    #include "KF_code_Call.h"
+    KF_code_Call_Func(u, y, xhatp, Pkp, Q11, Q22, Q33, R11, R22, xhat, Phat);
+
+
+    Running above code generates C-codes for KF implementation. Implementation using Simulink can be found in example folder.
     """
+    nX = A.shape[0]
+    nU = B.shape[1]
+    nY = C.shape[0]
 
-    assert isinstance(nX, int), "nX must be integer."
-    assert isinstance(nU, int), "nU must be integer."
-    assert isinstance(nY, int), "nY must be integer."
+    x = ca.SX.sym('x', nX, 1)
+    u = ca.SX.sym('u', nU, 1)
 
-    assert Qw.shape[0] == Qw.shape[1], "Qw is not square matrix."
-    assert Rv.shape[0] == Rv.shape[1], "Rv is not square matrix."
+    def Fc(x, u):
+        return A @ x + B @ u
 
-    assert nX == Ad.shape[0] == Ad.shape[1], "Shape mismatch of Ad with nX."
-    assert nX == Bd.shape[0], "Shape mismatch of Bd with nX."
-    assert nX == Cd.shape[1], "Shape mismatch of Cd with nX."
-    assert nX == Qw.shape[0], "Shape mismatch of Qw with nX."
-
-    assert nU == Bd.shape[1], "Shape mismatch of Bd with nU."
-    assert nY == Cd.shape[0], "Shape mismatch of Cd with nY."
-    assert nY == Rv.shape[0], "Shape mismatch of Rv with nY."
+    xk1 = Integrate(Fc, Integrator, Ts, x, u)
+    Ad = ca.jacobian(xk1, x)
+    Bd = ca.jacobian(xk1, u)
+    Cd = C
+    Dd = D
 
     xp = ca.SX.sym('xp', nX, 1)
     u = ca.SX.sym('u', nU, 1)
@@ -57,7 +95,7 @@ def KF(nX, nU, nY, Ad, Bd, Cd, Qw, Rv):
 
     xkm = Ad @ xp + Bd @ u
     Pkm = Ad @ Ppt @ ca.transpose(Ad) + Qw
-    yr = y - Cd @ xkm
+    yr = y - (Cd @ xkm + Dd @ u)
     Sk = Cd @ Pkm @ ca.transpose(Cd) + Rv
 
     Kk = Pkm @ ca.transpose(Cd) @ ca.inv(Sk)
@@ -69,21 +107,34 @@ def KF(nX, nU, nY, Ad, Bd, Cd, Qw, Rv):
 
 
 def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
-    """Function to implement Extended Kalman filter.
+    """
+    Function to implement Extended Kalman filter.
 
-    Args:
-        nX (int): Number of state variables
-        nU (int): Number of control inputs
-        ny (int): Number of measurement outputs
-        F (function): Function that returns right-hand side of state differential equation
-        H (function): Function that retuns measurement variable from state variable
-        Qw (numpy.2darray or casadi.SX array): Process noise covariance matrix
-        Rv (numpy.2darray or casadi.SX array): Measurement noise covariance matrix
-        Ts (float): Sample time of the Kalman filter.
-        Integrator (str, optional): Integration method. Defaults to 'rk4'. For list of supported integrator, please see documentation of function `Integrate`.
+    Parameters
+    ----------
+    nX: (int)
+        Number of state variables
+    nU: (int)
+        Number of control inputs
+    ny: (int)
+        Number of measurement outputs
+    F: (function)
+        Function that returns right-hand side of state differential equation. Input arguments to F should be states and inputs respectively.
+    H: (function)
+        Function that retuns measurement variable from state and input variables. nput arguments to H should be states and inputs respectively.
+    Qw: (numpy.2darray or casadi.SX array)
+        Process noise covariance matrix
+    Rv: (numpy.2darray or casadi.SX array)
+        Measurement noise covariance matrix
+    Ts: (float)
+        Sample time of the Kalman filter.
+    Integrator: (str, optional)
+        Integration method. Defaults to 'rk4'. For list of supported integrator, please see documentation of function `Integrate()`.
 
-    Returns:
-        tuple: Tuple of Input, Output, Input name and Output name. Inputs are u, y, xp, Pp and output are xhat and Phat. Input and output are casadi symbolics (`casadi.SX`).
+    Returns
+    -------
+    tuple: 
+        Tuple of Input, Output, Input name and Output name. Inputs are u, y, xp, Pp and output are xhat and Phat. Input and output are casadi symbolics (`casadi.SX`).
             u: Current input to the system
             y: Current measurement of the system
             xp: State estimate from previous discrete time
@@ -117,7 +168,7 @@ def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
     Fk = ca.jacobian(xkm, xp)
 
     Pkm = Fk @ Ppt @ ca.transpose(Fk) + Qw
-    yr = y - H(xkm)
+    yr = y - H(xkm, u)
 
     tmpfun = ca.Function('tmpfun', [xp], [ca.jacobian(H(xp), xp)])
     Hk = tmpfun(xkm)
@@ -132,27 +183,48 @@ def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
 
 
 def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-3, beta=2.0, kappa=0.0, Integrator='rk4'):
-    """Function to implement Unscented Kalman filter. If either of PCoeff or Wm or Wc is None, it calculates those values with alpha=1e-3, Beta=2 and kappa=0.
+    """
+    Function to implement Unscented Kalman filter. If either of PCoeff or Wm or Wc is None, it calculates those values with alpha=1e-3, Beta=2 and kappa=0.
 
-    Args:
-        nX (int): Number of state variables
-        nU (int): Number of control inputs
-        ny (int): Number of measurement outputs
-        F (function): Function that returns right-hand side of state differential equation
-        H (function): Function that retuns measurement variable from state variable
-        Qw (numpy.2darray or casadi.SX array): Process noise covariance matrix
-        Rv (numpy.2darray or casadi.SX array): Measurement noise covariance matrix
-        Ts (float): Sample time of the Kalman filter.
-        PCoeff (float): Coefficient of covariance matrix (inside square root term) when calculating sigma points. Defaults to None
-        Wm (list, optional): List of weights for mean calculation. Defaults to None.
-        Wc (list, optional): List of weights for covariance calculation. Defaults to None.
-        alpha (float, optional): Value of alpha parameter. Defaults to 1.0e-3.
-        beta (float, optional): Value of beta parameter. Defaults to 2.0.
-        kappa (float, optional): Value of kappa parameter. Defaults to 0.0.
-        Integrator (str, optional): Integration method. Defaults to 'rk4'. For list of supported integrator, please see documentation of function `Integrate`.
+    To use manual weights, specify PCOeff, Wm and Wc. Otherwise, use alpha, beta and kappa parameters to set those values.
 
-    Returns:
-        tuple: Tuple of Input, Output, Input name and Output name. Inputs are u, y, xp, Pp and output are xhat and Phat. Input and output are casadi symbolics (`casadi.SX`).
+    Parameters
+    ----------
+    nX: (int)
+        Number of state variables
+    nU: (int)
+        Number of control inputs
+    nY: (int)
+        Number of measurement outputs
+    F: (function)
+        Function that returns right-hand side of state differential equation. Input arguments to F should be states and inputs respectively.
+    H: (function)
+        Function that retuns measurement variable from state and input variables. nput arguments to H should be states and inputs respectively.
+    Qw: (numpy.2darray or casadi.SX array)
+        Process noise covariance matrix
+    Rv: (numpy.2darray or casadi.SX array)
+        Measurement noise covariance matrix
+    Ts: (float)
+        Sample time of the Kalman filter.
+    PCoeff: (float)
+        Coefficient of covariance matrix (inside square root term) when calculating sigma points. Defaults to None
+    Wm: (list, optional)
+        List of weights for mean calculation. Defaults to None.
+    Wc: (list, optional)
+        List of weights for covariance calculation. Defaults to None.
+    alpha: (float, optional)
+        Value of alpha parameter. Defaults to 1.0e-3.
+    beta: (float, optional)
+        Value of beta parameter. Defaults to 2.0.
+    kappa: (float, optional)
+        Value of kappa parameter. Defaults to 0.0.
+    Integrator: (str, optional)
+        Integration method. Defaults to 'rk4'. For list of supported integrator, please see documentation of function `Integrate`.
+
+    Returns
+    -------
+    tuple:
+        Tuple of Input, Output, Input name and Output name. Inputs are u, y, xp, Pp and output are xhat and Phat. Input and output are casadi symbolics (`casadi.SX`).
             u: Current input to the system
             y: Current measurement of the system
             xp: State estimate from previous discrete time
@@ -236,7 +308,7 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-
     Sy = ca.GenSX_zeros(nY, 2*nX+1)
 
     for i in range(2*nX+1):
-        Sy[:, i] = H(Sxkm[:, i])
+        Sy[:, i] = H(Sxkm[:, i], u)
 
     ykm = SigmaMean(Sy, Wm)
     Sk = SigmaCovar(Sy, Sy, Wm, Wc) + Rv
@@ -253,28 +325,47 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-
 
 
 def simpleMHE(nX, nU, nY, nP, N, Fc, Hc, Wp, Wm, Ts, pLower=[], pUpper=[], arrival=False, GGN=False, Integrator='rk4', Options=None):
-    """Function to generate simple MHE code using `qrqp` solver. For use with other advanced solver, see `MPC` class.
+    """
+    Function to generate simple MHE code using `qrqp` solver. For use with other advanced solver, see `MHE` class.
 
-    Args:
-        nX (int): Number of state variables.
-        nU (int): number of control input.
-        nY (int): Number of measurement variables.
-        nP (int): Number of parameter to be estimated. nP=0 while performing state estimation only.
-        N (int): Horizon length.
-        Fc (function): Function that returns right hand side of state equation.
-        Hc (function): Function that returns right hand side of measurement equation.
-        Wp (float or casadi.SX array or numpy.2darray): Weight for process noise term. It is $Q_w^{-1/2}$ where $Q_w$ is process noise covariance.
-        Wm (float or casadi.SX array or numpy.2darray): Weight for measurement noise term. It is $R_v^{-1/2}$ where $R_v$ is measurement noise covariance.
-        Ts (float): Sample time for MHE
-        pLower (list, optional): List of lower limits of unknown parameters. Defaults to [].
-        pUpper (list, optional): List of upper limits of unknown parameters. Defaults to [].
-        arrival (bool, optional): Whether to include arrival cost. Defaults to False.
-        GGN (bool, optional): Whether to use GGN. Use this option only when optimization problem is nonlinear. Defaults to False.
-        Integrator (str, optional): Integration method. See `BasicUtils.Integrate()` function. Defaults to 'rk4'.
-        Options (dict, optional): Option for `qrqp` solver. Defaults to None.
+    Parameters
+    ----------
+    nX: (int)
+        Number of state variables.
+    nU: (int)
+        number of control input.
+    nY: (int)
+        Number of measurement variables.
+    nP: (int)
+        Number of parameter to be estimated. nP=0 while performing state estimation only.
+    N: (int)
+        Horizon length.
+    Fc: (function)
+        Function that returns right hand side of state equation.
+    Hc: (function)
+        Function that returns right hand side of measurement equation.
+    Wp: (float or casadi.SX array or numpy.2darray)
+        Weight for process noise term. It is $Q_w^{-1/2}$ where $Q_w$ is process noise covariance.
+    Wm: (float or casadi.SX array or numpy.2darray)
+        Weight for measurement noise term. It is $R_v^{-1/2}$ where $R_v$ is measurement noise covariance.
+    Ts: (float): Sample time for MHE
+    pLower: (list, optional)
+        List of lower limits of unknown parameters. Defaults to [].
+    pUpper: (list, optional)
+        List of upper limits of unknown parameters. Defaults to [].
+    arrival: (bool, optional
+         Whether to include arrival cost. Defaults to False.
+    GGN: (bool, optional)
+        Whether to use GGN. Use this option only when optimization problem is nonlinear. Defaults to False.
+    Integrator: (str, optional)
+        Integration method. See `BasicUtils.Integrate()` function. Defaults to 'rk4'.
+    Options: (dict, optional)
+        Option for `qrqp` solver. Defaults to None.
 
-    Returns:
-        tuple: tuple: Tuple of Input, Output, Input name and Output name. Input and output are list of casadi symbolics (`casadi.SX`).
+    Returns
+    -------
+    tuple:
+        Tuple of Input, Output, Input name and Output name. Input and output are list of casadi symbolics (`casadi.SX`).
             Input should be control input and measurement data of past horizon length
             Output are all value of decision variable, estimations of parameter, estimates of states and cost function.
     """
