@@ -12,27 +12,103 @@ import zipfile
 
 
 class qpOASES:
-    def __init__(self, H, g, p=None, A=None, lbA=None, ubA=None, lbx=None, ubx=None) -> None:
-        """Class to create interface to qpOASES solver.
+    def __init__(self, H, h, p=None, A=None, lbA=None, ubA=None, lbx=None, ubx=None) -> None:
+        """
+        Class to create interface to qpOASES solver.
 
-        Args:
-            H (casadi.SX): Hessian matrix of cost function
-            g (casadi.SX): Linear coefficient vector of cost function
-            p (list, optional): List of input parameters to optimization problem. Defaults to None.
-            A (casadi.SX, optional): Constraint matrix. Defaults to None.
-            lbA (casadi.SX, optional): Lower bound on constraint matrix. Defaults to None.
-            ubA (casadi.SX, optional): Upper bound on constraint matrix. Defaults to None.
-            lbx (casadi.SX, optional): Lower bound on decision variables. Defaults to None.
-            ubx (casadi.SX, optional): Upper bound on decision variables. Defaults to None.
+        It can be used to generate to C/C++ code to solve given quadratic optimization problem.
+
+        Parameters
+        ----------
+            H: (casadi.SX)
+                Hessian matrix of cost function
+            h: (casadi.SX)
+                Linear coefficient vector of cost function
+            p: (list, optional)
+                List of input parameters to optimization problem. Defaults to None.
+            A: (casadi.SX, optional)
+                Constraint matrix. Defaults to None.
+            lbA: (casadi.SX, optional)
+                Lower bound on constraint matrix. Defaults to None.
+            ubA: (casadi.SX, optional)
+                Upper bound on constraint matrix. Defaults to None.
+            lbx: (casadi.SX, optional)
+                Lower bound on decision variables. Defaults to None.
+            ubx: (casadi.SX, optional)
+                Upper bound on decision variables. Defaults to None.
+        Returns
+        -------
+        None
+
+
+        Example
+        -------
+        Consider optimization problem:
+            min (x1-a)^2 + (x2-b)^2
+                s.t. 2x1+3x2 <= 3
+                     0 <= x1-x2 <= 10
+        
+        Solver for this optimization problem can be generated as
+        >>> import casadi as ca
+        >>> from pynlcontrol import QPInterface
+        >>> x1 = ca.SX.sym('x1')
+        >>> x2 = ca.SX.sym('x2')
+        >>> a = ca.SX.sym('a')
+        >>> b = ca.SX.sym('b')
+        >>> J = (x1-a)**2 + (x2-b)**2
+        >>> H, h, _ = ca.quadratic_coeff(J, ca.vertcat(x1, x2))
+        >>> g = ca.vertcat(2*x1+3*x2, x1-x2), ca.vertcat(x1, x2)
+        >>> lbg = ca.vertcat(-ca.inf, 0)
+        >>> ubg = ca.vertcat(3, 10)
+        >>> A, c = ca.linear_coeff(ca.vertcat(2*x1+3*x2, x1-x2), ca.vertcat(x1, x2))
+        >>> lbA = lbg - c
+        >>> ubA = ubg - c
+        >>> qp = QPInterface.qpOASES(H, h, A=A, lbA=lbA, ubA=ubA, p=[a, b])
+        >>> qp.exportCode('test1', dir='Test1_Exported', printsfun=True, mex=False, TestCode=False, Options={'max_iter': 5})
+        (xGuess[2x1], a[1x1], b[1x1])->(xOpt_VAL[2x1], Obj_VAL[1x1])
+        Test1_Exported/test1.c
+        Test1_Exported/test1_EVAL_CODE.c
+        Test1_Exported/test1_EVAL_CODE_Call.c
+        Test1_Exported/BLASReplacement.cpp
+        Test1_Exported/Bounds.cpp
+        Test1_Exported/Constraints.cpp
+        Test1_Exported/Flipper.cpp
+        Test1_Exported/Indexlist.cpp
+        Test1_Exported/Matrices.cpp
+        Test1_Exported/MessageHandling.cpp
+        Test1_Exported/Options.cpp
+        Test1_Exported/OQPinterface.cpp
+        Test1_Exported/QProblem.cpp
+        Test1_Exported/QProblemB.cpp
+        Test1_Exported/SolutionAnalysis.cpp
+        Test1_Exported/SparseSolver.cpp
+        Test1_Exported/SQProblem.cpp
+        Test1_Exported/SQProblemSchur.cpp
+        Test1_Exported/SubjectTo.cpp
+        Test1_Exported/Utils.cpp
+        #include "Test1_Exported/test1.h"
+        #include "Test1_Exported/test1_EVAL_CODE.h"
+        #include "Test1_Exported/test1_EVAL_CODE_Call.h"
+        // Try this first:
+        test1_Call(xGuess, a, b, xOpt_VAL, Obj_VAL);
+        // If previous does not work, try this:
+        double *xGuess_TEMP = (double *)xGuess;
+        double *a_TEMP = (double *)a;
+        double *b_TEMP = (double *)b;
+        test1_Call(xGuess_TEMP, a_TEMP, b_TEMP, xOpt_VAL, Obj_VAL);
+
+
+        Running above code generates C/C++ code that can be integrated into other platform. Simulink example is given. Printed output gives name and location of C/C++ files, header files and function call.
+
         """
         self.H = ca.densify(H)
-        self.g = g
+        self.h = h
 
         self.OutName = ["H", "g"]
-        self.Out = [self.H.T, self.g]
+        self.Out = [self.H.T, self.h]
         self.OutSize = [
             f"{self.H.shape[0]}*{self.H.shape[1]}",
-            f"{self.g.shape[0]}"
+            f"{self.h.shape[0]}"
         ]
 
         self.In = []
@@ -78,19 +154,29 @@ class qpOASES:
             self.nC = 0
 
     def exportEvalCode(self, funcname, dir='/', options=None):
-        """Method of class qpOASES to generate C code to evaluate H, h, A, lbA, ubA, lbx, ubx.
+        """
+        Method of class qpOASES to generate C code to evaluate H, h, A, lbA, ubA, lbx, ubx.
 
-        Args:
-            funcname (str): Function to be named that evaluates H, h, A, lbA, ubA, lbx and ubx.
-            dir (str, optional): Directory where codes are to be exported. Defaults to '/'.
-            options (dict, optional): Options for code generation. Same option as casadi.Function.generate() function. Defaults to None.
+        Parameters
+        ----------
+            funcname: (str)
+                Function to be named that evaluates H, h, A, lbA, ubA, lbx and ubx.
+            dir: (str, optional)
+                Directory where codes are to be exported. Defaults to '/'.
+            options: (dict, optional)
+                Options for code generation. Same option as casadi.Function.generate() function. Defaults to None.
+        
+        Returns
+        -------
+        None
+        
         """
         if options is None:
             options = {
                 'main': False,
                 'with_header': True
             }
-
+        
         Func = ca.Function(
             funcname,
             self.In,
@@ -102,15 +188,27 @@ class qpOASES:
         BasicUtils.Gen_Code(Func, funcname+'_CODE', dir, printhelp=False)
 
     def exportCode(self, filename, dir='/', mex=False, printsfun=False, Options=None, TestCode=False):
-        """Method of class qpOASES to export the code that solves quadratic programming.
+        """
+        Method of class qpOASES to export the code that solves quadratic programming.
 
-        Args:
-            filename (str): Filename for exported code.
-            dir (str, optional): Directory where code is to be exported. Defaults to '/'.
-            mex (bool, optional): Whether mex interface is required. Defaults to False.
-            printsfun (bool, optional): Whether MATLAB s-function interface is to be implemented. Defaults to False.
-            Options (dict, optional): Options for qpOASES solver. Defaults to None.
-            TestCode (bool, optional): Whether main function is required. Useful while testing and debugging. Defaults to False.
+        Parameters
+        ----------
+            filename: (str)
+                Filename for exported code.
+            dir: (str, optional)
+                Directory where code is to be exported. Defaults to '/'.
+            mex: (bool, optional)
+                Whether mex interface is required. Defaults to False.
+            printsfun: (bool, optional)
+                Whether MATLAB s-function interface is to be implemented. Defaults to False.
+            Options: (dict, optional)
+                Options for qpOASES solver. Defaults to None.
+            TestCode: (bool, optional)
+                Whether main function is required. Useful while testing and debugging. Defaults to False.
+        
+        Returns
+        -------
+        None
         """
 
         if Options is not None:
@@ -257,9 +355,9 @@ class qpOASES:
             print(f'#include "{tmpdir}{filename}_EVAL_CODE.h"')
             print(f'#include "{tmpdir}{filename}_EVAL_CODE_Call.h"\n')
 
-            print('\n# Try this first:')
+            print('\n// Try this first:')
             print(f'{filename}_Call(xGuess, {FuncIn_Str}, xOpt_VAL, Obj_VAL);')
-            print('\n# If previous does not work, try this:')
+            print('\n// If previous does not work, try this:')
             print(f"double *xGuess_TEMP = (double *)xGuess;")
             for k in range(len(self.InName)):
                 print(
