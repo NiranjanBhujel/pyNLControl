@@ -280,18 +280,14 @@ def Integrate(odefun, method, Ts, x0, u0, *args):
     -------
     >>> import numpy as np
     >>> import matplotlib.pyplot as plt
-
     >>> def Fc(x, u):
         x1 = x[0]
         x2 = x[1]
         return np.array([(1-x2**2)*x1 - x2 + u, x1])
-
     >>> T = 10
     >>> Ts = 0.1
-
     >>> t = np.arange(0, T+Ts, Ts)
     >>> x = np.zeros((2, t.shape[0]))
-
     >>> for k in range(t.shape[0]-1):
         u = 0 if t[k] < 1 else 1.0
         x[:,k+1] = Integrate(Fc, 'rk4', Ts, x[:,k], u)

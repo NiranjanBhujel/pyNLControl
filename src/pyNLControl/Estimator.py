@@ -108,7 +108,7 @@ def KF(A, B, C, D, Qw, Rv, Ts, Integrator='rk4'):
 
 def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
     """
-    Function to implement Extended Kalman filter.
+    Function to implement Extended Kalman filter (EKF).
 
     Parameters
     ----------
@@ -184,9 +184,9 @@ def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
 
 def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-3, beta=2.0, kappa=0.0, Integrator='rk4'):
     """
-    Function to implement Unscented Kalman filter. If either of PCoeff or Wm or Wc is None, it calculates those values with alpha=1e-3, Beta=2 and kappa=0.
-
-    To use manual weights, specify PCOeff, Wm and Wc. Otherwise, use alpha, beta and kappa parameters to set those values.
+    Function to implement Unscented Kalman filter (UKF). 
+    
+    If either of PCoeff or Wm or Wc is None, it calculates those values with alpha=1e-3, Beta=2 and kappa=0. To use manual weights, specify PCOeff, Wm and Wc. Otherwise, use alpha, beta and kappa parameters to set those values.
 
     Parameters
     ----------

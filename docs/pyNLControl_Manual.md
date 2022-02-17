@@ -1,6 +1,6 @@
 # pyNLControl
 
-`pyNLCOntrol` is a package to solve general estimation and control problem (including non-linear problem). Further, it also  provides different method for analysis of dynamic system. This package is based on \texttt{CasADi} for python ([https://web.casadi.org/](https://web.casadi.org/)). This means problem should be formulated in \texttt{CasADi}. 
+`pyNLCOntrol` is a package to solve general estimation and control problem (including non-linear problem). Further, it also  provides different method for analysis of dynamic system. This package is based on \texttt{CasADi} for python ([https://web.casadi.org/](https://web.casadi.org/)). This means problem should be formulated in `CasADi`. 
 
 ## Requirements
 * python >= 3.6 (might work on older version of python3, not tested)
@@ -156,18 +156,14 @@ Functions
     -------
     >>> import numpy as np
     >>> import matplotlib.pyplot as plt
-    
     >>> def Fc(x, u):
         x1 = x[0]
         x2 = x[1]
         return np.array([(1-x2**2)*x1 - x2 + u, x1])
-    
     >>> T = 10
     >>> Ts = 0.1
-    
     >>> t = np.arange(0, T+Ts, Ts)
     >>> x = np.zeros((2, t.shape[0]))
-    
     >>> for k in range(t.shape[0]-1):
         u = 0 if t[k] < 1 else 1.0
         x[:,k+1] = Integrate(Fc, 'rk4', Ts, x[:,k], u)
@@ -250,7 +246,7 @@ Functions
 
     
 `EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4')`
-:   Function to implement Extended Kalman filter.
+:   Function to implement Extended Kalman filter (EKF).
     
     Parameters
     ----------
@@ -351,9 +347,9 @@ Functions
 
     
 `UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=0.001, beta=2.0, kappa=0.0, Integrator='rk4')`
-:   Function to implement Unscented Kalman filter. If either of PCoeff or Wm or Wc is None, it calculates those values with alpha=1e-3, Beta=2 and kappa=0.
+:   Function to implement Unscented Kalman filter (UKF). 
     
-    To use manual weights, specify PCOeff, Wm and Wc. Otherwise, use alpha, beta and kappa parameters to set those values.
+    If either of PCoeff or Wm or Wc is None, it calculates those values with alpha=1e-3, Beta=2 and kappa=0. To use manual weights, specify PCOeff, Wm and Wc. Otherwise, use alpha, beta and kappa parameters to set those values.
     
     Parameters
     ----------

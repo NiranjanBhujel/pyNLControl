@@ -27,9 +27,4 @@ with open(fname, 'w') as f:
     nbf.write(nb, f)
 
 os.system("jupyter nbconvert --execute --to html UserGuide.ipynb")
-
-
-# input_filename = 'pyNLControl_Manual.md'
-# output_filename = 'pyNLControl_Manual.html'
-
-# os.system(f'pandoc -V geometry:margin=1in -f markdown -t html {input_filename} -o {output_filename}')
+os.system("jupyter nbconvert --to webpdf --allow-chromium-download UserGuide.ipynb")
