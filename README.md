@@ -1,6 +1,6 @@
 # pyNLControl
 
-`pyNLCOntrol` is a package to solve general estimation and control problem (including non-linear problem). Further, it also  provides different method for analysis of dynamic system. This package is based on \texttt{CasADi} for python ([https://web.casadi.org/](https://web.casadi.org/)). This means problem should be formulated in `CasADi`. 
+`pyNLCOntrol` is a package to solve general estimation and control problem (including non-linear problem). Further, it also  provides different method for analysis of dynamic system. This package is based on `CasADi` for python ([https://web.casadi.org/](https://web.casadi.org/)). This means problem should be formulated in `CasADi`. 
 
 ## Requirements
 * python >= 3.6 (might work on older version of python3, not tested)

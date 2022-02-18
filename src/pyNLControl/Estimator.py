@@ -3,7 +3,7 @@
 # Description:  Contains estimators such as kalman filter, extended kalman filter and simple moving horizon estimators
 
 
-from pynlcontrol.BasicUtils import Integrate, nlp2GGN
+from pynlcontrol.BasicUtils import Integrate, nlp2GGN, casadi2List
 import casadi as ca
 
 
@@ -185,7 +185,7 @@ def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
 def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-3, beta=2.0, kappa=0.0, Integrator='rk4'):
     """
     Function to implement Unscented Kalman filter (UKF). 
-    
+
     If either of PCoeff or Wm or Wc is None, it calculates those values with alpha=1e-3, Beta=2 and kappa=0. To use manual weights, specify PCOeff, Wm and Wc. Otherwise, use alpha, beta and kappa parameters to set those values.
 
     Parameters
@@ -241,12 +241,12 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-
             SMean += Wm[k] * S[:, [k]]
         return SMean
 
-
     def SigmaCovar(S1, S2, Wm, Wc):
         N = len(Wm)
         SCov = ca.GenSX_zeros(S1.shape[0], S2.shape[0])
         for k in range(N):
-            SCov += Wc[k] * (S1[:, k] - SigmaMean(S1, Wm)) @ ca.transpose((S2[:, [k]] - SigmaMean(S2, Wm)))
+            SCov += Wc[k] * (S1[:, k] - SigmaMean(S1, Wm)
+                             ) @ ca.transpose((S2[:, [k]] - SigmaMean(S2, Wm)))
         return SCov
 
     def GenSigma(xbar, P, PCoeff):
@@ -263,7 +263,6 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-
 
         return S
 
-
     assert isinstance(nX, int), "nX must be integer."
     assert isinstance(nU, int), "nU must be integer."
     assert isinstance(nY, int), "nY must be integer."
@@ -276,7 +275,6 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-
     assert nY == Rv.shape[0], "Shape mismatch of Rv with nY."
 
     assert isinstance(Ts, float), "Sample time (Ts) must be float."
-    
 
     if PCoeff is None or Wm is None or Wc is None:
         L = nX
@@ -287,7 +285,7 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-
         Wm = [W0m] + [1/(2*alpha**2*(L+kappa)) for i in range(2*nX)]
 
         W0c = 2-alpha**2+beta-L/(alpha**2*(L+kappa))
-        Wc = [W0c] + [1/(2*alpha**2*(L+kappa)) for i in range(2*nX)]    
+        Wc = [W0c] + [1/(2*alpha**2*(L+kappa)) for i in range(2*nX)]
 
     xp = ca.SX.sym('xp', nX, 1)
     u = ca.SX.sym('u', nU, 1)
@@ -324,7 +322,7 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-
     return [u, y, xp, Pp], [mu, ca.reshape(Pk, nX*nX, 1)], ['u', 'y', 'xp', 'Pp'], ['xhat', 'Phat']
 
 
-def simpleMHE(nX, nU, nY, nP, N, Fc, Hc, Wp, Wm, Ts, pLower=[], pUpper=[], arrival=False, GGN=False, Integrator='rk4', Options=None):
+def simpleMHE(nX, nU, nY, nP, Fc, Hc, Wp, Wm, N, Ts, pLow=[], pUpp=[], arrival=False, GGN=False, Integrator='rk4', Options=None):
     """
     Function to generate simple MHE code using `qrqp` solver. For use with other advanced solver, see `MHE` class.
 
@@ -333,13 +331,11 @@ def simpleMHE(nX, nU, nY, nP, N, Fc, Hc, Wp, Wm, Ts, pLower=[], pUpper=[], arriv
     nX: (int)
         Number of state variables.
     nU: (int)
-        number of control input.
+        number of control variables.
     nY: (int)
         Number of measurement variables.
     nP: (int)
         Number of parameter to be estimated. nP=0 while performing state estimation only.
-    N: (int)
-        Horizon length.
     Fc: (function)
         Function that returns right hand side of state equation.
     Hc: (function)
@@ -348,10 +344,12 @@ def simpleMHE(nX, nU, nY, nP, N, Fc, Hc, Wp, Wm, Ts, pLower=[], pUpper=[], arriv
         Weight for process noise term. It is $Q_w^{-1/2}$ where $Q_w$ is process noise covariance.
     Wm: (float or casadi.SX array or numpy.2darray)
         Weight for measurement noise term. It is $R_v^{-1/2}$ where $R_v$ is measurement noise covariance.
+    N: (int)
+        Horizon length.
     Ts: (float): Sample time for MHE
-    pLower: (list, optional)
+    pLow: (list, optional)
         List of lower limits of unknown parameters. Defaults to [].
-    pUpper: (list, optional)
+    pUpp: (list, optional)
         List of upper limits of unknown parameters. Defaults to [].
     arrival: (bool, optional
          Whether to include arrival cost. Defaults to False.
@@ -401,11 +399,19 @@ def simpleMHE(nX, nU, nY, nP, N, Fc, Hc, Wp, Wm, Ts, pLower=[], pUpper=[], arriv
 
     # Stage terms in cost function
     for k in range(N):
-        J = ca.vertcat(
-            J,
-            Wm @ (Y[:, k] - Hc(X[:, k])),
-            Wp @ (X[:, k+1] - Integrate(Fc, Integrator, Ts, X[:, k], U[:, k], P))
-        )
+        if estParam:
+            J = ca.vertcat(
+                J,
+                Wm @ (Y[:, k] - Hc(X[:, k])),
+                Wp @ (X[:, k+1] - Integrate(Fc,
+                      Integrator, Ts, X[:, k], U[:, k], P))
+            )
+        else:
+            J = ca.vertcat(
+                J,
+                Wm @ (Y[:, k] - Hc(X[:, k])),
+                Wp @ (X[:, k+1] - Integrate(Fc, Integrator, Ts, X[:, k], U[:, k]))
+            )
 
     J = ca.vertcat(
         J,
@@ -425,11 +431,11 @@ def simpleMHE(nX, nU, nY, nP, N, Fc, Hc, Wp, Wm, Ts, pLower=[], pUpper=[], arriv
             )
             lbg = ca.vertcat(
                 lbg,
-                pLower[k]
+                pLow[k]
             )
             ubg = ca.vertcat(
                 ubg,
-                pUpper[k]
+                pUpp[k]
             )
     else:
         g = None
@@ -486,12 +492,19 @@ def simpleMHE(nX, nU, nY, nP, N, Fc, Hc, Wp, Wm, Ts, pLower=[], pUpper=[], arriv
     else:
         Options = optTemp
 
-    MHE_prob = {
-        'x': nlp['x'],
-        'f': nlp['f'],
-        'g': nlp['g'],
-        'p': nlp['p']
-    }
+    if estParam:
+        MHE_prob = {
+            'x': nlp['x'],
+            'f': nlp['f'],
+            'g': nlp['g'],
+            'p': nlp['p'],
+        }
+    else:
+        MHE_prob = {
+            'x': nlp['x'],
+            'f': nlp['f'],
+            'p': nlp['p'],
+        }
 
     S = ca.nlpsol('S', 'sqpmethod', MHE_prob, Options)
 
@@ -529,7 +542,8 @@ def simpleMHE(nX, nU, nY, nP, N, Fc, Hc, Wp, Wm, Ts, pLower=[], pUpper=[], arriv
         )
 
     if estParam:
-        r = S(x0=xGuess, p=pVal, lbg=lbg, ubg=ubg)
+        print("ubg", ubg)
+        r = S(x0=xGuess, p=pVal, lbg=casadi2List(lbg), ubg=casadi2List(ubg))
     else:
         r = S(x0=xGuess, p=pVal)
 
