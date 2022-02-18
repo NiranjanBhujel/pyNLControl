@@ -48,6 +48,4 @@ void {{FileName}}_Call(double *xGuess, {%for xin in InName%}double *{{xin}}, {%e
 
     qp.getPrimalSolution(xOpt);
     Obj[0] = qp.getObjVal();
-
-
 }

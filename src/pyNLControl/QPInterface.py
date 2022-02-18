@@ -57,10 +57,10 @@ class qpOASES:
         >>> b = ca.SX.sym('b')
         >>> J = (x1-a)**2 + (x2-b)**2
         >>> H, h, _ = ca.quadratic_coeff(J, ca.vertcat(x1, x2))
-        >>> g = ca.vertcat(2*x1+3*x2, x1-x2), ca.vertcat(x1, x2)
+        >>> g = ca.vertcat(2*x1+3*x2, x1-x2)
         >>> lbg = ca.vertcat(-ca.inf, 0)
         >>> ubg = ca.vertcat(3, 10)
-        >>> A, c = ca.linear_coeff(ca.vertcat(2*x1+3*x2, x1-x2), ca.vertcat(x1, x2))
+        >>> A, c = ca.linear_coeff(g, ca.vertcat(x1, x2))
         >>> lbA = lbg - c
         >>> ubA = ubg - c
         >>> qp = QPInterface.qpOASES(H, h, A=A, lbA=lbA, ubA=ubA, p=[a, b])
@@ -326,7 +326,9 @@ class qpOASES:
             # Print inputs and outputs with their respective size
             print(f'\n({Fin})->({Fout})\n')
 
-            FuncIn_Str = ', '.join(self.InName)
+            FuncIn_Str = ""
+            for tmp in self.InName:
+                FuncIn_Str += str(tmp) + ', '
             # print('INC_PATH qpOASES/include')
             print(f'{tmpdir}{filename}.c')
             print(f'{tmpdir}{filename}_EVAL_CODE.c')
@@ -356,18 +358,17 @@ class qpOASES:
             print(f'#include "{tmpdir}{filename}_EVAL_CODE_Call.h"\n')
 
             print('\n// Try this first:')
-            print(f'{filename}_Call(xGuess, {FuncIn_Str}, xOpt_VAL, Obj_VAL);')
+            print(f'{filename}_Call(xGuess, {FuncIn_Str} xOpt_VAL, Obj_VAL);')
             print('\n// If previous does not work, try this:')
             print(f"double *xGuess_TEMP = (double *)xGuess;")
             for k in range(len(self.InName)):
                 print(
                     f"double *{self.InName[k]}_TEMP = (double *){self.InName[k]};")
 
-            FuncIn = []
+            FuncIn_Str = ""
             for tmp in self.InName:
-                FuncIn.append(str(tmp) + '_TEMP')
-            FuncIn_Str = ', '.join(FuncIn)
-            print(f'{filename}_Call(xGuess_TEMP, {FuncIn_Str}, xOpt_VAL, Obj_VAL);\n')
+                FuncIn_Str += str(tmp) + '_TEMP, '
+            print(f'{filename}_Call(xGuess_TEMP, {FuncIn_Str} xOpt_VAL, Obj_VAL);\n')
 
         if TestCode:
             Headers = [f"{filename}.h", f"{filename}_EVAL_CODE.h",

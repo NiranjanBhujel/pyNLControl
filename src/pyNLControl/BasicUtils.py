@@ -472,3 +472,11 @@ def directSum(A):
         Row_Idx += A[i].shape[0]
         Col_Idx += A[i].shape[1]
     return z
+
+
+def casadi2List(x):
+    n = x.shape[0]
+    z = []
+    for k in range(n):
+        z.append(float(x[k]))
+    return z
