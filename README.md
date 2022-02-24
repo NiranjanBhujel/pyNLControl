@@ -14,6 +14,6 @@ pip install pyNLControl
 ```
 
 ## Supported control and estimator
-* Estimators: Kalman filter, Extended Kalman Filter, Unscented Kalman Filter and simple moving horizon estimators. Partical filter,  advanced moving horizon estimator, etc will be added soon.
-* Control: LQR only. Other controllers including nonlinear Model Predictive Control will be added soon
+* Estimators: Kalman filter, Extended Kalman Filter, Unscented Kalman Filter and simple Moving Horizon Estimators. Partical filter,  advanced moving horizon estimator, etc will be added soon.
+* Control: LQR and simple Model Predictive Control. Other controllers will be added soon
 * Misc: Nonlinear observability analysis, Noise covariance identification will be added soon

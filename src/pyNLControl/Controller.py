@@ -125,7 +125,7 @@ def LQR(A, B, C, D, Q, R, Qt, Ts, horizon=inf, reftrack=False, NMAX=1000, tol=1e
         return [x], [u, K.T.reshape((-1, 1))], ['x'], ['u', 'K']
 
 
-def simpleMPC(nX, nU, nY, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='rk4', Options=None):
+def simpleMPC(nX, nU, nY, nP, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='rk4', Options=None):
     """
     Function to generate simple MPC code using `qrqp` solver. For use with other advanced solver, see `MPC` class.
 
@@ -137,6 +137,8 @@ def simpleMPC(nX, nU, nY, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='rk4'
         Number of input variables
     nY : int
         Number of control output variables
+    nP : int
+        Number of external parameters
     Fc : function
         Function that returns right hand side of state equation.
     Hc : function
@@ -167,13 +169,13 @@ def simpleMPC(nX, nU, nY, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='rk4'
     -------
     >>> import casadi as ca
     >>> from pynlcontrol import BasicUtils, Controller
-    >>> def Fc(x, u):    
+    >>> def Fc(x, u, p):    
         A = ca.SX([[-0.4, 0.1, -2], [0, -0.3, 4], [1, 0, 0]])
         B = ca.SX([[1, 1], [0, 1], [1, 0]])
         return A @ x + B @ u
     >>> def Hc(x):
         return ca.vertcat(x[0], x[1])
-    >>> In, Out, InName, OutName = Controller.simpleMPC(3, 2, 2, Fc, Hc, 25, 0.1, [-10, 0], [10, 3], GGN=False)
+    >>> In, Out, InName, OutName = Controller.simpleMPC(3, 2, 2, 0, Fc, Hc, 25, 0.1, [-10, 0], [10, 3], GGN=False)
     -------------------------------------------
     This is casadi::QRQP
     Number of variables:                             128
@@ -201,6 +203,7 @@ def simpleMPC(nX, nU, nY, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='rk4'
     """
     X = ca.SX.sym('X', nX, N+1)
     U = ca.SX.sym('U', nU, N)
+    P = ca.SX.sym('P', nP, 1)
     X0 = ca.SX.sym('X0', nX, 1)
     Xref = ca.SX.sym('Xref', nY, 1)
 
@@ -246,7 +249,7 @@ def simpleMPC(nX, nU, nY, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='rk4'
     for k in range(N):
         g = ca.vertcat(
             g,
-            X[:, k+1] - Integrate(Fc, Integrator, Ts, X[:, k], U[:, k]),
+            X[:, k+1] - Integrate(Fc, Integrator, Ts, X[:, k], U[:, k], P),
         )
         lbg = ca.vertcat(
             lbg,
@@ -283,7 +286,7 @@ def simpleMPC(nX, nU, nY, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='rk4'
         U.reshape((-1, 1)),
         X.reshape((-1, 1))
     )
-    pIn = ca.vertcat(X0, Xref, *Q, *Qt, *R)
+    pIn = ca.vertcat(X0, Xref, *Q, *Qt, *R, P)
     if GGN:
         nlp = nlp2GGN(z, J, g, lbg, ubg, pIn)
         nlp['p'] = ca.vertcat(
@@ -317,6 +320,7 @@ def simpleMPC(nX, nU, nY, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='rk4'
 
     zGuess = ca.MX.sym('zGuess', MPC_prob['x'].shape)
     X0p = ca.MX.sym('X0p', nX, 1)
+    Pp = ca.MX.sym('Pp', nP, 1)
 
     Xrefp = ca.MX.sym('Xrefp', nY, 1)
 
@@ -324,7 +328,7 @@ def simpleMPC(nX, nU, nY, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='rk4'
     Qtp = [ca.MX.sym(f'Qtp{k+1}{k+1}') for k in range(nY)]
     Rp = [ca.MX.sym(f'Rp{k+1}{k+1}') for k in range(nU)]
 
-    pVal = pIn = ca.vertcat(X0p, Xrefp, *Qp, *Qtp, *Rp)
+    pVal = pIn = ca.vertcat(X0p, Xrefp, *Qp, *Qtp, *Rp, Pp)
 
     if GGN:
         zOpp = ca.MX.sym('zOpp', z.shape)
@@ -345,11 +349,11 @@ def simpleMPC(nX, nU, nY, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='rk4'
     In = [
         zGuess,
         X0p,
-        Xrefp] + Qp + Qtp + Rp
+        Xrefp] + Qp + Qtp + Rp + [Pp]
     InName = [
         'zGuess',
         'x0',
-        'xref'] + __SXname__(Qp) + __SXname__(Qtp) + __SXname__(Rp)
+        'xref'] + __SXname__(Qp) + __SXname__(Qtp) + __SXname__(Rp) + ['P']
 
     if GGN:
         In.append(zOpp)
