@@ -5,6 +5,8 @@
 
 from pynlcontrol.BasicUtils import Integrate, nlp2GGN, casadi2List
 import casadi as ca
+import os
+from jinja2 import Environment, FileSystemLoader
 
 
 def KF(A, B, C, D, Qw, Rv, Ts, Integrator='rk4'):
@@ -51,6 +53,7 @@ def KF(A, B, C, D, Qw, Rv, Ts, Integrator='rk4'):
     >>> Q22 = ca.SX.sym('Q22')
     >>> Q33 = ca.SX.sym('Q33')
     >>> Q = BasicUtils.directSum([Q11, Q22, Q33])
+    >>> R11 = ca.SX.sym('R11')
     >>> R22 = ca.SX.sym('R22')
     >>> R = BasicUtils.directSum([R11, R22])
     >>> A = ca.SX([[-0.4,0.1,-2],[0,-0.3,4],[1,0,0]])
@@ -542,7 +545,6 @@ def simpleMHE(nX, nU, nY, nP, Fc, Hc, Wp, Wm, N, Ts, pLow=[], pUpp=[], arrival=F
         )
 
     if estParam:
-        print("ubg", ubg)
         r = S(x0=xGuess, p=pVal, lbg=casadi2List(lbg), ubg=casadi2List(ubg))
     else:
         r = S(x0=xGuess, p=pVal)
@@ -581,5 +583,22 @@ def simpleMHE(nX, nU, nY, nP, Fc, Hc, Wp, Wm, N, Ts, pLow=[], pUpp=[], arrival=F
 
     Out.append(r['f'])
     OutName.append('Cost')
+
+    # Code for data collector MATLAB
+    templatePath = f"{os.path.dirname(os.path.realpath(__file__))}/templates"
+
+    file_loader = FileSystemLoader(templatePath)
+    env = Environment(loader=file_loader)
+
+    # template for c file
+    template = env.get_template('MHE_DataCollect.j2')
+
+    DataCollectCode = template.render(
+        N=N,
+        nU=nU,
+        nY=nY
+    )
+
+    print(DataCollectCode + "\n")
 
     return In, Out, InName, OutName

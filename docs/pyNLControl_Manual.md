@@ -1,6 +1,6 @@
 # pyNLControl
 
-`pyNLCOntrol` is a package to solve general estimation and control problem (including non-linear problem). Further, it also  provides different method for analysis of dynamic system. This package is based on \texttt{CasADi} for python ([https://web.casadi.org/](https://web.casadi.org/)). This means problem should be formulated in `CasADi`. 
+`pyNLCOntrol` is a package to solve general estimation and control problem (including non-linear problem). Further, it also  provides different method for analysis of dynamic system. This package is based on `CasADi` for python ([https://web.casadi.org/](https://web.casadi.org/)). This means problem should be formulated in `CasADi`. 
 
 ## Requirements
 * python >= 3.6 (might work on older version of python3, not tested)
@@ -14,8 +14,8 @@ pip install pyNLControl
 ```
 
 ## Supported control and estimator
-* Estimators: Kalman filter, Extended Kalman Filter, Unscented Kalman Filter and simple moving horizon estimators. Partical filter,  advanced moving horizon estimator, etc will be added soon.
-* Control: LQR only. Other controllers including nonlinear Model Predictive Control will be added soon
+* Estimators: Kalman filter, Extended Kalman Filter, Unscented Kalman Filter and simple Moving Horizon Estimators. Partical filter,  advanced moving horizon estimator, etc will be added soon.
+* Control: LQR and simple Model Predictive Control. Other controllers will be added soon
 * Misc: Nonlinear observability analysis, Noise covariance identification will be added soon
 
 Module pynlcontrol.BasicUtils
@@ -176,6 +176,10 @@ Functions
     The above code integrates the ODE defined by function Fc from 0 to 10 s with step-time of 0.1 s using RK4 method.
 
     
+`casadi2List(x)`
+:   
+
+    
 `directSum(A)`
 :   Direct sum of matrices in the list A.
     
@@ -326,6 +330,7 @@ Functions
     >>> Q22 = ca.SX.sym('Q22')
     >>> Q33 = ca.SX.sym('Q33')
     >>> Q = BasicUtils.directSum([Q11, Q22, Q33])
+    >>> R11 = ca.SX.sym('R11')
     >>> R22 = ca.SX.sym('R22')
     >>> R = BasicUtils.directSum([R11, R22])
     >>> A = ca.SX([[-0.4,0.1,-2],[0,-0.3,4],[1,0,0]])
@@ -398,7 +403,7 @@ Functions
             These inputs are and outputs can be mapped using `casadi.Function` which can further be code generated.
 
     
-`simpleMHE(nX, nU, nY, nP, N, Fc, Hc, Wp, Wm, Ts, pLower=[], pUpper=[], arrival=False, GGN=False, Integrator='rk4', Options=None)`
+`simpleMHE(nX, nU, nY, nP, Fc, Hc, Wp, Wm, N, Ts, pLow=[], pUpp=[], arrival=False, GGN=False, Integrator='rk4', Options=None)`
 :   Function to generate simple MHE code using `qrqp` solver. For use with other advanced solver, see `MHE` class.
     
     Parameters
@@ -406,13 +411,11 @@ Functions
     nX: (int)
         Number of state variables.
     nU: (int)
-        number of control input.
+        number of control variables.
     nY: (int)
         Number of measurement variables.
     nP: (int)
         Number of parameter to be estimated. nP=0 while performing state estimation only.
-    N: (int)
-        Horizon length.
     Fc: (function)
         Function that returns right hand side of state equation.
     Hc: (function)
@@ -421,10 +424,12 @@ Functions
         Weight for process noise term. It is $Q_w^{-1/2}$ where $Q_w$ is process noise covariance.
     Wm: (float or casadi.SX array or numpy.2darray)
         Weight for measurement noise term. It is $R_v^{-1/2}$ where $R_v$ is measurement noise covariance.
+    N: (int)
+        Horizon length.
     Ts: (float): Sample time for MHE
-    pLower: (list, optional)
+    pLow: (list, optional)
         List of lower limits of unknown parameters. Defaults to [].
-    pUpper: (list, optional)
+    pUpp: (list, optional)
         List of upper limits of unknown parameters. Defaults to [].
     arrival: (bool, optional
          Whether to include arrival cost. Defaults to False.
@@ -516,6 +521,82 @@ Functions
     
     Running above code generates C-codes for LQR implementation. Implementation using Simulink can be found in example folder.
 
+    
+`simpleMPC(nX, nU, nY, nP, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='rk4', Options=None)`
+:   Function to generate simple MPC code using `qrqp` solver. For use with other advanced solver, see `MPC` class.
+    
+    Parameters
+    ----------
+    nX : int
+        Number of state variables.
+    nU : int
+        Number of input variables
+    nY : int
+        Number of control output variables
+    nP : int
+        Number of external parameters
+    Fc : function
+        Function that returns right hand side of state equation.
+    Hc : function
+        Function that returns right hand side of control output equation.
+    N : float or casadi.SX array or numpy.2darray
+        Horizon length
+    Ts : float
+        Sample time
+    uLow : list or float
+        Lower limit on control input
+    uUpp : list of str
+        Upper limit on control input
+    GGN : bool, optional
+        Whether generalized Gauss Newton should be used. Use only for nonlinear problem. by default False
+    Integrator : str, optional
+        Integration method. See `BasicUtils.Integrate()` function. by default 'rk4'
+    Options : _type_, optional
+        Option for `qrqp` solver. Defaults to None.
+    
+    Returns
+    -------
+    tuple:
+        Tuple of Input, Output, Input name and Output name. Input and output are list of casadi symbolics (`casadi.SX`).
+            Inputs are initial guess, current state, reference, corresponding weights
+            Outputs value of all decision variables, calculated control signal and cost function
+    
+    Example
+    -------
+    >>> import casadi as ca
+    >>> from pynlcontrol import BasicUtils, Controller
+    >>> def Fc(x, u, p):    
+        A = ca.SX([[-0.4, 0.1, -2], [0, -0.3, 4], [1, 0, 0]])
+        B = ca.SX([[1, 1], [0, 1], [1, 0]])
+        return A @ x + B @ u
+    >>> def Hc(x):
+        return ca.vertcat(x[0], x[1])
+    >>> In, Out, InName, OutName = Controller.simpleMPC(3, 2, 2, 0, Fc, Hc, 25, 0.1, [-10, 0], [10, 3], GGN=False)
+    -------------------------------------------
+    This is casadi::QRQP
+    Number of variables:                             128
+    Number of constraints:                            78
+    Number of nonzeros in H:                         100
+    Number of nonzeros in A:                         453
+    Number of nonzeros in KKT:                      1112
+    Number of nonzeros in QR(R):                    1728
+    -------------------------------------------
+    This is casadi::Sqpmethod.
+    Using exact Hessian
+    Number of variables:                             128
+    Number of constraints:                            78
+    Number of nonzeros in constraint Jacobian:       453
+    Number of nonzeros in Lagrangian Hessian:        100
+    
+    >>> MPC_func = ca.Function('MPC_func', In, Out, InName, OutName)
+    >>> BasicUtils.Gen_Code(MPC_func, 'MPC_Code', printhelp=True, optim=True)
+    zGuess(128, 1), x0(3, 1), xref(2, 1), Qp11(1, 1), Qp22(1, 1), Qtp11(1, 1), Qtp22(1, 1), Rp11(1, 1), Rp22(1, 1) -> zOut(128, 1), uCalc(2, 1), Cost(1, 1)
+    MPC_Code.c
+    MPC_Code_Call.c
+    #include "MPC_Code.h"
+    #include "MPC_Code_Call.h"
+    MPC_Code_Call_Func(zGuess, x0, xref, Qp11, Qp22, Qtp11, Qtp22, Rp11, Rp22, zOut, uCalc, Cost);
+
 Module pynlcontrol.QPInterface
 ==============================
 
@@ -566,10 +647,10 @@ Classes
     >>> b = ca.SX.sym('b')
     >>> J = (x1-a)**2 + (x2-b)**2
     >>> H, h, _ = ca.quadratic_coeff(J, ca.vertcat(x1, x2))
-    >>> g = ca.vertcat(2*x1+3*x2, x1-x2), ca.vertcat(x1, x2)
+    >>> g = ca.vertcat(2*x1+3*x2, x1-x2)
     >>> lbg = ca.vertcat(-ca.inf, 0)
     >>> ubg = ca.vertcat(3, 10)
-    >>> A, c = ca.linear_coeff(ca.vertcat(2*x1+3*x2, x1-x2), ca.vertcat(x1, x2))
+    >>> A, c = ca.linear_coeff(g, ca.vertcat(x1, x2))
     >>> lbA = lbg - c
     >>> ubA = ubg - c
     >>> qp = QPInterface.qpOASES(H, h, A=A, lbA=lbA, ubA=ubA, p=[a, b])
