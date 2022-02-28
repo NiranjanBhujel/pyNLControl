@@ -480,3 +480,48 @@ def casadi2List(x):
     for k in range(n):
         z.append(float(x[k]))
     return z
+
+
+
+def qrSym(A):
+    """
+    Performs QR decomposition of matrix A using householder reflection. 
+
+    Args:
+        A (ca.SX.sym): Matrix A in casadi symbolics
+
+    Returns:
+        Q: Q matrix of decomposition
+        R: R matrix of decomposition
+    """
+
+    
+    m, n = A.shape
+
+    Q = ca.SX_eye(m)
+
+    R = ca.GenSX_zeros(m, n)
+
+    for i in range(m):
+        for j in range(n):
+            R[i,j] = A[i,j]
+
+    for k in range(n):
+        x = R[k:,[k]]
+
+        alpha = ca.norm_2(x)
+        e = ca.GenSX_zeros(m-k, 1)
+        e[0, 0] = 1.0
+
+        u = x - alpha * e
+
+        v = u/ca.norm_2(u)
+
+        Qtmp = ca.SX_eye(m)
+
+        Qtmp[k:,k:] = ca.SX_eye(m-k) - 2*v@v.T
+
+        Q = Q @ Qtmp
+        R = Qtmp @ R
+
+    return Q, R
