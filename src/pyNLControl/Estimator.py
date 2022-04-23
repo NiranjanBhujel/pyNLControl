@@ -1,9 +1,9 @@
 # Filename:     Estimator.py
 # Written by:   Niranjan Bhujel
-# Description:  Contains estimators such as kalman filter, extended kalman filter and simple moving horizon estimators
+# Description:  Contains estimators such as kalman filter, extended kalman filter, unscented kalman filter and simple moving horizon estimators
 
 
-from pynlcontrol.BasicUtils import Integrate, nlp2GGN, casadi2List
+from pynlcontrol.BasicUtils import Integrate, nlp2GGN, casadi2List, directSum, qrSym
 import casadi as ca
 import os
 from jinja2 import Environment, FileSystemLoader
@@ -93,11 +93,10 @@ def KF(A, B, C, D, Qw, Rv, Ts, Integrator='rk4'):
     u = ca.SX.sym('u', nU, 1)
     y = ca.SX.sym('y', nY, 1)
 
-    Pp = ca.SX.sym('Pp', nX*nX, 1)
-    Ppt = ca.reshape(Pp, nX, nX)
+    Pp = ca.SX.sym('Pp', nX, nX)
 
     xkm = Ad @ xp + Bd @ u
-    Pkm = Ad @ Ppt @ ca.transpose(Ad) + Qw
+    Pkm = Ad @ Pp @ ca.transpose(Ad) + Qw
     yr = y - (Cd @ xkm + Dd @ u)
     Sk = Cd @ Pkm @ ca.transpose(Cd) + Rv
 
@@ -106,7 +105,7 @@ def KF(A, B, C, D, Qw, Rv, Ts, Integrator='rk4'):
     xhat = xkm + Kk @ yr
     Phat = (ca.SX_eye(Ad.shape[0]) - Kk @ Cd) @ Pkm
 
-    return [u, y, xp, Pp], [xhat, ca.reshape(Phat, nX*nX, 1)], ['u', 'y', 'xhatp', 'Pkp'], ['xhat', 'Phat']
+    return [u, y, xp, Pp], [xhat, Phat], ['u', 'y', 'xhatp', 'Pkp'], ['xhat', 'Phat']
 
 
 def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
@@ -124,7 +123,7 @@ def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
     F: (function)
         Function that returns right-hand side of state differential equation. Input arguments to F should be states and inputs respectively.
     H: (function)
-        Function that retuns measurement variable from state and input variables. nput arguments to H should be states and inputs respectively.
+        Function that retuns measurement variable from state and input variables. nput arguments to H should be states.
     Qw: (numpy.2darray or casadi.SX array)
         Process noise covariance matrix
     Rv: (numpy.2darray or casadi.SX array)
@@ -164,17 +163,15 @@ def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
     u = ca.SX.sym('u', nU, 1)
     y = ca.SX.sym('y', nY, 1)
 
-    Pp = ca.SX.sym('Pp', nX*nX, 1)
-    Ppt = ca.reshape(Pp, nX, nX)
+    Pp = ca.SX.sym('Pp', nX, nX)
 
     xkm = Integrate(F, Integrator, Ts, xp, u)
     Fk = ca.jacobian(xkm, xp)
 
-    Pkm = Fk @ Ppt @ ca.transpose(Fk) + Qw
-    yr = y - H(xkm, u)
+    Pkm = Fk @ Pp @ ca.transpose(Fk) + Qw
+    yr = y - H(xkm)
 
-    tmpfun = ca.Function('tmpfun', [xp], [ca.jacobian(H(xp), xp)])
-    Hk = tmpfun(xkm)
+    Hk = ca.substitute(ca.jacobian(H(xp), xp), xp, xkm)
 
     Sk = Hk @ Pkm @ ca.transpose(Hk) + Rv
     Kk = Pkm @ ca.transpose(Hk) @ ca.inv(Sk)
@@ -182,7 +179,7 @@ def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
     xhat = xkm + Kk @ yr
     Phat = (ca.SX_eye(Fk.shape[0]) - Kk @ Hk) @ Pkm
 
-    return [u, y, xp, Pp], [xhat, ca.reshape(Phat, nX*nX, 1)], ['u', 'y', 'xhatp', 'Pkp'], ['xhat', 'Phat']
+    return [u, y, xp, Pp], [xhat, Phat], ['u', 'y', 'xhatp', 'Pkp'], ['xhat', 'Phat']
 
 
 def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-3, beta=2.0, kappa=0.0, Integrator='rk4'):
@@ -202,7 +199,7 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-
     F: (function)
         Function that returns right-hand side of state differential equation. Input arguments to F should be states and inputs respectively.
     H: (function)
-        Function that retuns measurement variable from state and input variables. nput arguments to H should be states and inputs respectively.
+        Function that retuns measurement variable from state and input variables. Input arguments to H should be states.
     Qw: (numpy.2darray or casadi.SX array)
         Process noise covariance matrix
     Rv: (numpy.2darray or casadi.SX array)
@@ -294,9 +291,9 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-
     u = ca.SX.sym('u', nU, 1)
     y = ca.SX.sym('y', nY, 1)
 
-    Pp = ca.SX.sym('Pp', nX*nX, 1)
-    Ppt = ca.reshape(Pp, nX, nX)
-    Sx = GenSigma(xp, Ppt, PCoeff)
+    Pp = ca.SX.sym('Pp', nX, nX)
+
+    Sx = GenSigma(xp, Pp, PCoeff)
 
     Sxkm = ca.GenSX_zeros(Sx.shape)
 
@@ -309,7 +306,7 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-
     Sy = ca.GenSX_zeros(nY, 2*nX+1)
 
     for i in range(2*nX+1):
-        Sy[:, i] = H(Sxkm[:, i], u)
+        Sy[:, i] = H(Sxkm[:, i])
 
     ykm = SigmaMean(Sy, Wm)
     Sk = SigmaCovar(Sy, Sy, Wm, Wc) + Rv
@@ -322,10 +319,10 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-
 
     Pk = Pkm - Kk @ Sk @ Kk.T
 
-    return [u, y, xp, Pp], [mu, ca.reshape(Pk, nX*nX, 1)], ['u', 'y', 'xp', 'Pp'], ['xhat', 'Phat']
+    return [u, y, xp, Pp], [mu, Pk], ['u', 'y', 'xp', 'Pp'], ['xhat', 'Phat']
 
 
-def simpleMHE(nX, nU, nY, nP, Fc, Hc, Wp, Wm, N, Ts, pLow=[], pUpp=[], arrival=False, GGN=False, Integrator='rk4', Options=None):
+def simpleMHE(nX, nU, nY, nP, Fc, Hc, N, Ts, pLow, pUpp, arrival=False, GGN=False, Integrator='rk4', Options=None):
     """
     Function to generate simple MHE code using `qrqp` solver. For use with other advanced solver, see `MHE` class.
 
@@ -377,6 +374,9 @@ def simpleMHE(nX, nU, nY, nP, Fc, Hc, Wp, Wm, N, Ts, pLow=[], pUpp=[], arrival=F
     U = ca.SX.sym('U', nU, N)
     Y = ca.SX.sym('Y', nY, N+1)
 
+    VL = ca.SX.sym('VL', nY, nY)
+    WL = ca.SX.sym('WL', nX, nX)
+
     J = ca.vertcat()
 
     # Symbolics for parameters
@@ -386,18 +386,17 @@ def simpleMHE(nX, nU, nY, nP, Fc, Hc, Wp, Wm, N, Ts, pLow=[], pUpp=[], arrival=F
     # Arrival cost in cost function formulation
     if arrival:
         xb = ca.SX.sym('xb', nX, 1)
-        Wax = ca.SX.sym('Wax', nX*nX, 1)
-        J = ca.vertcat(
-            J,
-            Wax.reshape((nX, nX)) @ (X[:, 0] - xb)
-        )
-        # Add parameter as well in arrival cost
+        Waxp = ca.SX.sym('Wax', (nX+nP), (nX+nP))
         if estParam:
             pb = ca.SX.sym('pb', nP, 1)
-            Wap = ca.SX.sym('Wap', nP*nP, 1)
             J = ca.vertcat(
                 J,
-                Wap.reshape((nP, nP)) @ (P - pb)
+                Waxp @ ca.vertcat(X[:, 0] - xb, P - pb)
+            )
+        else:
+            J = ca.vertcat(
+                J,
+                Waxp @ (X[:, 0] - xb)
             )
 
     # Stage terms in cost function
@@ -405,21 +404,27 @@ def simpleMHE(nX, nU, nY, nP, Fc, Hc, Wp, Wm, N, Ts, pLow=[], pUpp=[], arrival=F
         if estParam:
             J = ca.vertcat(
                 J,
-                Wm @ (Y[:, k] - Hc(X[:, k])),
-                Wp @ (X[:, k+1] - Integrate(Fc,
+                VL @ (Y[:, k] - Hc(X[:, k], P)),
+                WL @ (X[:, k+1] - Integrate(Fc,
                       Integrator, Ts, X[:, k], U[:, k], P))
             )
         else:
             J = ca.vertcat(
                 J,
-                Wm @ (Y[:, k] - Hc(X[:, k])),
-                Wp @ (X[:, k+1] - Integrate(Fc, Integrator, Ts, X[:, k], U[:, k]))
+                VL @ (Y[:, k] - Hc(X[:, k])),
+                WL @ (X[:, k+1] - Integrate(Fc, Integrator, Ts, X[:, k], U[:, k]))
             )
 
-    J = ca.vertcat(
-        J,
-        Wm @ (Y[:, N] - Hc(X[:, N]))
-    )
+    if estParam:
+        J = ca.vertcat(
+            J,
+            VL @ (Y[:, N] - Hc(X[:, N], P))
+        )
+    else:
+        J = ca.vertcat(
+            J,
+            WL @ (Y[:, N] - Hc(X[:, N]))
+        )
 
     # Constraints on parameters
     if estParam:
@@ -456,21 +461,24 @@ def simpleMHE(nX, nU, nY, nP, Fc, Hc, Wp, Wm, N, Ts, pLow=[], pUpp=[], arrival=F
 
     pIn = ca.vertcat(
         U.reshape((-1, 1)),
-        Y.reshape((-1, 1))
+        Y.reshape((-1, 1)),
+        VL.reshape((-1, 1)),
+        WL.reshape((-1, 1))
     )
 
     if arrival:
-        pIn = ca.vertcat(
-            pIn,
-            xb,
-            Wax
-        )
-
         if estParam:
             pIn = ca.vertcat(
                 pIn,
+                xb,
                 pb,
-                Wap
+                Waxp.reshape((-1, 1)),
+            )
+        else:
+            pIn = ca.vertcat(
+                pIn,
+                xb,
+                Waxp.reshape((-1, 1)),
             )
 
     if GGN:
@@ -515,26 +523,32 @@ def simpleMHE(nX, nU, nY, nP, Fc, Hc, Wp, Wm, N, Ts, pLow=[], pUpp=[], arrival=F
     Up = ca.MX.sym('Up', nU, N)
     Yp = ca.MX.sym('Yp', nY, N+1)
 
+    VLp = ca.MX.sym('VLp', nY, nY)
+    WLp = ca.MX.sym('WLp', nX, nX)
+
     pVal = ca.vertcat(
         Up.reshape((-1, 1)),
-        Yp.reshape((-1, 1))
+        Yp.reshape((-1, 1)),
+        VLp.reshape((-1, 1)),
+        WLp.reshape((-1, 1)),
     )
 
     if arrival:
         xbp = ca.MX.sym('xbp', xb.shape)
-        Waxp = ca.MX.sym('Waxp', nX*nX, 1)
-        pVal = ca.vertcat(
-            pVal,
-            xbp,
-            Waxp
-        )
+        Waxpp = ca.MX.sym('Waxp', (nX+nP), (nX+nP))
         if estParam:
-            pbp = ca.MX.sym('pbp', nP, 1)
-            Wapp = ca.MX.sym('Wapp', nP*nP, 1)
+            pbp = ca.MX.sym('pbp', pb.shape)
             pVal = ca.vertcat(
                 pVal,
+                xbp,
                 pbp,
-                Wapp
+                Waxpp.reshape((-1, 1)),
+            )
+        else:
+            pVal = ca.vertcat(
+                pVal,
+                xbp,
+                Waxpp.reshape((-1, 1)),
             )
 
     if GGN:
@@ -561,11 +575,15 @@ def simpleMHE(nX, nU, nY, nP, Fc, Hc, Wp, Wm, N, Ts, pLow=[], pUpp=[], arrival=F
     ]
 
     if arrival:
-        In += [xbp, Waxp]
-        InName += ['xL', 'WxL']
         if estParam:
-            In += [pbp, Wapp]
-            InName += ['pL', 'WpL']
+            In += [xbp, pbp, Waxpp]
+            InName += ['xL', 'pL', 'PL']
+        else:
+            In += [xbp, Waxpp]
+            InName += ['xL', 'PL']
+
+    In += [VLp, WLp]
+    InName += ['VL', 'WL']
 
     if GGN:
         In.append(zOpp)
@@ -584,6 +602,10 @@ def simpleMHE(nX, nU, nY, nP, Fc, Hc, Wp, Wm, N, Ts, pLow=[], pUpp=[], arrival=F
     Out.append(r['f'])
     OutName.append('Cost')
 
+    if arrival:
+        Out.append(r['x'][nP:nP+nX])
+        OutName.append('xLout')
+
     # Code for data collector MATLAB
     templatePath = f"{os.path.dirname(os.path.realpath(__file__))}/templates"
 
@@ -600,5 +622,201 @@ def simpleMHE(nX, nU, nY, nP, Fc, Hc, Wp, Wm, N, Ts, pLow=[], pUpp=[], arrival=F
     )
 
     print(DataCollectCode + "\n")
+
+    return In, Out, InName, OutName
+
+
+def arrivalCost(nX, nU, nY, nP, Fc, Hc, Ts, method='QR', Integrator='rk4'):
+    """
+    Method to implement arrival cost for moving horizon estimator.
+
+    The general form of arrival cost term is:
+
+        J_{arrival} = ||P_L(x_L-xLb, p-pLb)||^2
+
+    Parameters
+    ----------
+    nX : int
+        Number of state variables
+    nU : int
+        Number of input variables
+    nY : int
+        Number of measurement variables
+    nP : int
+        Number of parameter to be estimated
+    Fc : python function
+        Function that returns right hand side of continuous time state equations
+    Hc : python function
+        Function that returns measurement variable. This function takes x and p as input arguments. When nP=0, the function only takes x as input argument.
+    Ts : float
+        Sample time for MHE
+    method : str, optional
+        Method to implement arrival cost. Currently, only QR factorization based approach is supported. Possible values are 'QR'.
+        'QR': Method as given on "A real-time algorithm for moving horizon state and parameter estimation., Peter K{\"u}hl and Moritz Diehl and Tom Kraus and Johannes P. Schl{\"o}der and Hans Georg Bock"
+    Integrator : str, optional
+        Integrator method to discretize state equations., by default 'rk4'
+
+    Returns
+    -------
+    tuple
+        In: Input symbolics to the arrival cost function
+            xLo: Estimates of states at end of horizon window estimated at previous discrete time
+            pLo: Estimates of parameters estimated at previous discrete time
+            xLb: Value of $\bar{x}_L$ to be used for arrival cost update
+            pLb: Value of $\bar{p}_L$ to be used for arrival cost update
+            PL: Weight for arrival cost from previous discrete time
+            u: Control input at the end of horizon window
+            yL: Measurement at the end of horizon window
+            VL: Weight for measurement term
+            WL: Weight for process term
+            Wp: Weight for parameter term
+        InName: Corresponding name of above input
+
+        Out: Output symbolics returned by arrival cost function
+            xLbn: New value of $\bar{x}_L$ to be used for arrival cost update
+            pLbn: New value of $\bar{x}_L$ to be used for arrival cost update
+            PLn: New value of $\bar{x}_L$ to be used for arrival cost update
+        OutName: Corresponding name of above output
+
+    Above In, Out, InName and OutName can be unsed to create casadi Function which can be code generated.
+
+    Note: When nP=0, Input/Output corresponding to parameters are not returned.
+    """
+
+    # TODO: Add EKF based arrival cost update method.  
+
+    estParam = nP > 0
+
+    x = ca.SX.sym('x', nX, 1)
+    u = ca.SX.sym('u', nU, 1)
+
+    xL = ca.SX.sym('xL', nX, 1)
+    xLb = ca.SX.sym('xLb', nX, 1)
+
+    WL = ca.SX.sym('WL', nX, nX)
+    WLt = WL
+
+    VL = ca.SX.sym('VL', nY, nY)
+
+    PL = ca.SX.sym('PL', (nX+nP), (nX+nP))
+
+    yL = ca.SX.sym('yL', nY, 1)
+
+    if estParam:
+        p = ca.SX.sym('p', nP, 1)
+        pL = ca.SX.sym('pL', nP, 1)
+        pLb = ca.SX.sym('pLb', nP, 1)
+
+        Wp = ca.SX.sym('Wp', nP, nP)
+        Wpt = Wp
+
+        xk1 = Integrate(Fc, Integrator, Ts, x, u, p)
+
+        hk1 = Hc(x, p)
+
+        Xx = ca.substitute(ca.jacobian(xk1, x),
+                           ca.vertcat(x, p), ca.vertcat(xL, pL))
+        Xp = ca.substitute(ca.jacobian(xk1, p),
+                           ca.vertcat(x, p), ca.vertcat(xL, pL))
+        xtil = ca.substitute(xk1, ca.vertcat(
+            x, p), ca.vertcat(xL, pL)) - Xx @ xL - Xp @ pL
+
+        Hx = ca.substitute(ca.jacobian(hk1, x),
+                           ca.vertcat(x, p), ca.vertcat(xL, pL))
+        Hp = ca.substitute(ca.jacobian(hk1, p),
+                           ca.vertcat(x, p), ca.vertcat(xL, pL))
+        htil = ca.substitute(hk1, ca.vertcat(
+            x, p), ca.vertcat(xL, pL)) - Hx @ xL - Hp @ pL
+
+        WLb = directSum([WLt, Wpt])
+
+        xLVar = ca.SX.sym('xLVar', nX, 1)
+        pLVar = ca.SX.sym('pLVar', nP, 1)
+        xLVar1 = ca.SX.sym('xLVar1', nX, 1)
+        pLVar1 = ca.SX.sym('pLVar1', nP, 1)
+
+        J = ca.vertcat(
+            PL @ ca.vertcat(xLVar-xLb, pLVar-pLb),
+            VL @ (yL - htil - Hx @ xLVar - Hp @ pLVar),
+            WLb @ ca.vertcat(xLVar1 - xtil - Xx @ xLVar -
+                             Xp @ pLVar, pLVar1 - pLVar)
+        )
+
+        A, b = ca.linear_coeff(J, ca.vertcat(xLVar, pLVar, xLVar1, pLVar1))
+
+        Q, R = qrSym(A)
+
+        rho = Q.T @ b
+
+        rho1 = rho[0:nX + nP, :]
+        rho2 = rho[nX + nP:2*(nX+nP), :]
+        rho3 = rho[2*(nX+nP):, :]
+
+        R2 = R[nX+nP:2*(nX+nP), nX+nP:]
+
+        xpLbnew = -ca.inv(R2) @ rho2
+
+        PLnew = ca.GenSX_zeros(R2.shape)
+
+        for i in range(R2.shape[0]):
+            for j in range(R2.shape[1]):
+                PLnew[i, j] = R2[i, j]
+
+        xLbnew = xpLbnew[0:nX, 0]
+        pLbnew = xpLbnew[nX:nX+nP, 0]
+
+        In = [xL, pL, xLb, pLb, PL, u, yL, VL, WL, Wp]
+        InName = ['xLo', 'pLo', 'xLb', 'pLb', 'PL', 'uL', 'yL', 'VL', 'WL', 'Wp']
+
+        Out = [xLbnew, pLbnew, PLnew]
+        OutName = ['xLbn', 'pLbn', 'PLn']
+
+    else:
+        xk1 = Integrate(Fc, Integrator, Ts, x, u)
+
+        hk1 = Hc(x)
+
+        Xx = ca.substitute(ca.jacobian(xk1, x), x, xL)
+
+        xtil = ca.substitute(xk1, x, xL) - Xx @ xL
+
+        Hx = ca.substitute(ca.jacobian(hk1, x), x, xL)
+
+        htil = ca.substitute(hk1, x, xL) - Hx @ xL
+
+        xLVar = ca.SX.sym('xLVar', nX, 1)
+        xLVar1 = ca.SX.sym('xLVar1', nX, 1)
+
+        J = ca.vertcat(
+            PL @ (xLVar-xLb),
+            VL @ (yL - htil - Hx @ xLVar),
+            WL @ (xLVar1 - xtil - Xx @ xLVar)
+        )
+
+        A, b = ca.linear_coeff(J, ca.vertcat(xLVar, xLVar1))
+
+        Q, R = qrSym(A)
+
+        rho = Q.T @ b
+
+        rho1 = rho[0:nX, :]
+        rho2 = rho[nX:2*nX, :]
+        rho3 = rho[2*nX:, :]
+
+        R2 = R[nX:2*nX, nX:]
+
+        xLbn = -ca.inv(R2) @ rho2
+
+        PLnew = ca.GenSX_zeros(R2.shape)
+
+        for i in range(R2.shape[0]):
+            for j in range(R2.shape[1]):
+                PLnew[i, j] = R2[i, j]
+
+        In = [xL, xLb, PL, u, yL, VL, WL]
+        InName = ['xLo', 'xLb', 'PL', 'uL', 'yL', 'VL', 'WL', ]
+
+        Out = [xLbn, PLnew]
+        OutName = ['xLbn', 'PLn']
 
     return In, Out, InName, OutName

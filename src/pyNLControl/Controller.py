@@ -122,10 +122,10 @@ def LQR(A, B, C, D, Q, R, Qt, Ts, horizon=inf, reftrack=False, NMAX=1000, tol=1e
 
         return [x, r], [u, K.T.reshape((-1, 1))], ['x', 'ref'], ['u', 'K']
     else:
-        return [x], [u, K.T.reshape((-1, 1))], ['x'], ['u', 'K']
+        return [x], [u, K.T.reshape((-1, 1)), P], ['x'], ['u', 'K', 'P']
 
 
-def simpleMPC(nX, nU, nY, nP, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='rk4', Options=None):
+def simpleMPC(nX, nU, nY, nP, Fc, Hc, Gk, Gn, N, Ts, uLow, uUpp, GGN=False, solver='qrqp', Integrator='rk4', Options=None):
     """
     Function to generate simple MPC code using `qrqp` solver. For use with other advanced solver, see `MPC` class.
 
@@ -143,6 +143,10 @@ def simpleMPC(nX, nU, nY, nP, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='
         Function that returns right hand side of state equation.
     Hc : function
         Function that returns right hand side of control output equation.
+    Gk : function
+        Function that returns general constraints. Input arguments should be x, u, p and return as tuple (g, lbg, ubg)
+    Gn : function
+        Function that returns general terminal constraints. Input arguments should be x, p and return as tuple (g, lbg, ubg)
     N : float or casadi.SX array or numpy.2darray
         Horizon length
     Ts : float
@@ -169,13 +173,20 @@ def simpleMPC(nX, nU, nY, nP, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='
     -------
     >>> import casadi as ca
     >>> from pynlcontrol import BasicUtils, Controller
-    >>> def Fc(x, u, p):    
-        A = ca.SX([[-0.4, 0.1, -2], [0, -0.3, 4], [1, 0, 0]])
-        B = ca.SX([[1, 1], [0, 1], [1, 0]])
-        return A @ x + B @ u
+    >>> def Fc(x, u):
+            A = ca.SX(
+                [
+                    [-0.4, 0.1, -2],
+                    [0, -0.3, 4],
+                    [1, 0, 0]
+                ]
+            )
+            B = ca.SX(
+                [
+                    [1, 1],
     >>> def Hc(x):
-        return ca.vertcat(x[0], x[1])
-    >>> In, Out, InName, OutName = Controller.simpleMPC(3, 2, 2, 0, Fc, Hc, 25, 0.1, [-10, 0], [10, 3], GGN=False)
+            return ca.vertcat(x[0], x[1])
+    >>> In, Out, InName, OutName = Controller.simpleMPC(3, 2, 2, 0, Fc, Hc, None, None, 25, 0.1, [-10, 0], [10, 3], GGN=False)
     -------------------------------------------
     This is casadi::QRQP
     Number of variables:                             128
@@ -194,38 +205,45 @@ def simpleMPC(nX, nU, nY, nP, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='
 
     >>> MPC_func = ca.Function('MPC_func', In, Out, InName, OutName)
     >>> BasicUtils.Gen_Code(MPC_func, 'MPC_Code', printhelp=True, optim=True)
-    zGuess(128, 1), x0(3, 1), xref(2, 1), Qp11(1, 1), Qp22(1, 1), Qtp11(1, 1), Qtp22(1, 1), Rp11(1, 1), Rp22(1, 1) -> zOut(128, 1), uCalc(2, 1), Cost(1, 1)
+    zGuess(128, 1), x0(3, 1), xref(2, 1), Q(2, 2), Qt(2, 2), R(2, 2) -> zOut(128, 1), uCalc(2, 1), Cost(1, 1)
+
+
     MPC_Code.c
     MPC_Code_Call.c
+
+
     #include "MPC_Code.h"
     #include "MPC_Code_Call.h"
-    MPC_Code_Call_Func(zGuess, x0, xref, Qp11, Qp22, Qtp11, Qtp22, Rp11, Rp22, zOut, uCalc, Cost);
+
+
+    MPC_Code_Call_Func(zGuess, x0, xref, Q, Qt, R, zOut, uCalc, Cost);
     """
+    if Options is None:
+        Options = {}
+
     X = ca.SX.sym('X', nX, N+1)
     U = ca.SX.sym('U', nU, N)
+
+
     P = ca.SX.sym('P', nP, 1)
     X0 = ca.SX.sym('X0', nX, 1)
     Xref = ca.SX.sym('Xref', nY, 1)
 
-    Q = [ca.SX.sym(f'Q{k+1}{k+1}') for k in range(nY)]
-    Qt = [ca.SX.sym(f'Qt{k+1}{k+1}') for k in range(nY)]
-    R = [ca.SX.sym(f'R{k+1}{k+1}') for k in range(nU)]
-
-    Qw = directSum(Q)
-    Qtw = directSum(Qt)
-    Rw = directSum(R)
+    Q = ca.SX.sym('Q', nY, nY)
+    Qt = ca.SX.sym('Qt', nY, nY)
+    R = ca.SX.sym('R', nU, nU)
 
     J = ca.vertcat()
     for k in range(N):
         J = ca.vertcat(
             J,
-            Qw @ (Hc(X[:,k]) - Xref),
-            Rw @ U[:,k]
+            Q @ (Hc(X[:,k],  P) - Xref),
+            R @ U[:,k]
         )
 
     J = ca.vertcat(
         J,
-        Qtw @ (Hc(X[:,k]) - Xref)
+        Qt @ (Hc(X[:,N], P) - Xref)
     )
 
     g = ca.vertcat()
@@ -247,9 +265,10 @@ def simpleMPC(nX, nU, nY, nP, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='
 
     # State equations constraints
     for k in range(N):
+        Xnext = Integrate(Fc, Integrator, Ts, X[:, k], U[:, k], P) if nP > 0 else Integrate(Fc, Integrator, Ts, X[:, k], U[:, k], P)
         g = ca.vertcat(
             g,
-            X[:, k+1] - Integrate(Fc, Integrator, Ts, X[:, k], U[:, k], P),
+            X[:, k+1] - Xnext,
         )
         lbg = ca.vertcat(
             lbg,
@@ -259,6 +278,19 @@ def simpleMPC(nX, nU, nY, nP, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='
             ubg,
             ca.GenSX_zeros(nX, 1),
         )
+
+    if Gk is not None:
+        for k in range(N):
+            g_tmp, lbg_tmp, ubg_tmp = Gk(X[:,k], U[:,k], P)
+            g = ca.vertcat(g, g_tmp)
+            lbg = ca.vertcat(lbg, lbg_tmp)
+            ubg = ca.vertcat(ubg, ubg_tmp)
+
+    if Gn is not None:
+        g_tmp, lbg_tmp, ubg_tmp = Gn(X[:,N], P)
+        g = ca.vertcat(g, g_tmp)
+        lbg = ca.vertcat(lbg, lbg_tmp)
+        ubg = ca.vertcat(ubg, ubg_tmp)
 
     lbx = ca.vertcat()
     ubx = ca.vertcat()
@@ -286,7 +318,7 @@ def simpleMPC(nX, nU, nY, nP, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='
         U.reshape((-1, 1)),
         X.reshape((-1, 1))
     )
-    pIn = ca.vertcat(X0, Xref, *Q, *Qt, *R, P)
+    pIn = ca.vertcat(X0, Xref, Q.reshape((-1, 1)), Qt.reshape((-1, 1)), R.reshape((-1, 1)), P) if nP > 0 else ca.vertcat(X0, Xref, Q.reshape((-1, 1)), Qt.reshape((-1, 1)), R.reshape((-1, 1)))
     if GGN:
         nlp = nlp2GGN(z, J, g, lbg, ubg, pIn)
         nlp['p'] = ca.vertcat(
@@ -303,12 +335,6 @@ def simpleMPC(nX, nU, nY, nP, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='
             'p': pIn
         }
 
-    optTemp = {'qpsol': 'qrqp'}
-    if Options is not None:
-        Options.update(optTemp)
-    else:
-        Options = optTemp
-
     MPC_prob = {
         'x': nlp['x'],
         'f': nlp['f'],
@@ -316,19 +342,34 @@ def simpleMPC(nX, nU, nY, nP, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='
         'p': nlp['p']
     }
 
-    S = ca.nlpsol('S', 'sqpmethod', MPC_prob, Options)
+    if solver=='qrqp':
+        optTemp = {'qpsol': 'qrqp'}
+        if Options is not None:
+            Options.update(optTemp)
+        else:
+            Options = optTemp
+        S = ca.nlpsol('S', 'sqpmethod', MPC_prob, Options)
+    elif solver=='ipopt':
+        if Options is None:
+            if 'tol' not in Options.keys():
+                Options.update({'tol': 1e-4})
+            if 'max_iter' not in Options.keys():
+                Options.update({'max_iter': 100})
+        S = ca.nlpsol('S', 'ipopt', MPC_prob, Options)
 
     zGuess = ca.MX.sym('zGuess', MPC_prob['x'].shape)
     X0p = ca.MX.sym('X0p', nX, 1)
-    Pp = ca.MX.sym('Pp', nP, 1)
+
+    if nP > 0:
+        Pp = ca.MX.sym('Pp', nP, 1)
 
     Xrefp = ca.MX.sym('Xrefp', nY, 1)
 
-    Qp = [ca.MX.sym(f'Qp{k+1}{k+1}') for k in range(nY)]
-    Qtp = [ca.MX.sym(f'Qtp{k+1}{k+1}') for k in range(nY)]
-    Rp = [ca.MX.sym(f'Rp{k+1}{k+1}') for k in range(nU)]
+    Qp = ca.MX.sym('Qp', nY, nY)
+    Qtp = ca.MX.sym('Qtp', nY, nY)
+    Rp = ca.MX.sym('Rp', nU, nU)
 
-    pVal = pIn = ca.vertcat(X0p, Xrefp, *Qp, *Qtp, *Rp, Pp)
+    pVal = pIn = ca.vertcat(X0p, Xrefp, Qp.reshape((-1, 1)), Qtp.reshape((-1, 1)), Rp.reshape((-1, 1)), Pp) if nP > 0 else ca.vertcat(X0p, Xrefp, Qp.reshape((-1, 1)), Qtp.reshape((-1, 1)), Rp.reshape((-1, 1)))
 
     if GGN:
         zOpp = ca.MX.sym('zOpp', z.shape)
@@ -349,11 +390,21 @@ def simpleMPC(nX, nU, nY, nP, Fc, Hc, N, Ts, uLow, uUpp, GGN=False, Integrator='
     In = [
         zGuess,
         X0p,
-        Xrefp] + Qp + Qtp + Rp + [Pp]
+        Xrefp,
+        Qp,
+        Qtp,
+        Rp]
     InName = [
         'zGuess',
         'x0',
-        'xref'] + __SXname__(Qp) + __SXname__(Qtp) + __SXname__(Rp) + ['P']
+        'xref',
+        'Q',
+        'Qt',
+        'R']
+
+    if nP > 0:
+        In += [Pp]
+        InName += ['P']
 
     if GGN:
         In.append(zOpp)
