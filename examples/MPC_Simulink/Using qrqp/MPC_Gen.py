@@ -2,7 +2,7 @@ import casadi as ca
 from pynlcontrol import BasicUtils, Controller
 
 
-def Fc(x, u):
+def Fc(x, u, p):
     A = ca.SX(
         [
             [-0.4, 0.1, -2],
@@ -20,11 +20,15 @@ def Fc(x, u):
     return A @ x + B @ u
 
 
-def Hc(x):
+def Hc(x, p):
     return ca.vertcat(x[0], x[1])
 
+def Gk(x, u, p):
+    return -0.1, u[0] - x[0], 0.1
 
-In, Out, InName, OutName = Controller.simpleMPC(nX=3, nU=2, nY=2, Fc=Fc, Fc=Hc, N=25, Ts=0.1, uLow=[-10, 0], uUpp=[10, 3], GGN=False)
+
+
+In, Out, InName, OutName = Controller.simpleMPC(3, 2, 2, 0, Fc, Hc, None, None, 25, 0.1, [-10, 0], [10, 3], GGN=False)
 
 
 MPC_func = ca.Function('MPC_func', In, Out, InName, OutName)

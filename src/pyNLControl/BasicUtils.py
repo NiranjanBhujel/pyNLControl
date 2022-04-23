@@ -475,6 +475,19 @@ def directSum(A):
 
 
 def casadi2List(x):
+    """
+    Converts casadi vector to list.
+
+    Parameters
+    ----------
+    x : casadi.SX.sym
+        Input casadi symbolic vector.
+
+    Returns
+    -------
+    list
+        List that contains element of vector x.
+    """
     n = x.shape[0]
     z = []
     for k in range(n):
@@ -495,6 +508,7 @@ def qrSym(A):
         R: R matrix of decomposition
     """
 
+    # TODO: make the QR factorization more robust.
     
     m, n = A.shape
 

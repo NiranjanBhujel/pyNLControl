@@ -177,7 +177,17 @@ Functions
 
     
 `casadi2List(x)`
-:   
+:   Converts casadi vector to list.
+    
+    Parameters
+    ----------
+    x : casadi.SX.sym
+        Input casadi symbolic vector.
+    
+    Returns
+    -------
+    list
+        List that contains element of vector x.
 
     
 `directSum(A)`
@@ -241,6 +251,17 @@ Functions
             g: New constraint function
             lbg: Lower limits on constraint function
             ubg: Upper limits on constraint function
+
+    
+`qrSym(A)`
+:   Performs QR decomposition of matrix A using householder reflection. 
+    
+    Args:
+        A (ca.SX.sym): Matrix A in casadi symbolics
+    
+    Returns:
+        Q: Q matrix of decomposition
+        R: R matrix of decomposition
 
 Module pynlcontrol.Estimator
 ============================
@@ -403,7 +424,63 @@ Functions
             These inputs are and outputs can be mapped using `casadi.Function` which can further be code generated.
 
     
-`simpleMHE(nX, nU, nY, nP, Fc, Hc, Wp, Wm, N, Ts, pLow=[], pUpp=[], arrival=False, GGN=False, Integrator='rk4', Options=None)`
+`arrivalCost(nX, nU, nY, nP, Fc, Hc, Ts, method='QR', Integrator='rk4')`
+:   Method to implement arrival cost for moving horizon estimator.
+    
+    The general form of arrival cost term is:
+    
+        J_{arrival} = ||P_L(x_L-xLb, p-pLb)||^2
+    
+    Parameters
+    ----------
+    nX : int
+        Number of state variables
+    nU : int
+        Number of input variables
+    nY : int
+        Number of measurement variables
+    nP : int
+        Number of parameter to be estimated
+    Fc : python function
+        Function that returns right hand side of continuous time state equations
+    Hc : python function
+        Function that returns measurement variable. This function takes x and p as input arguments. When nP=0, the function only takes x as input argument.
+    Ts : float
+        Sample time for MHE
+    method : str, optional
+        Method to implement arrival cost. Currently, only QR factorization based approach is supported. Possible values are 'QR'.
+        'QR': Method as given on "A real-time algorithm for moving horizon state and parameter estimation., Peter K{"u}hl and Moritz Diehl and Tom Kraus and Johannes P. Schl{"o}der and Hans Georg Bock"
+    Integrator : str, optional
+        Integrator method to discretize state equations., by default 'rk4'
+    
+    Returns
+    -------
+    tuple
+        In: Input symbolics to the arrival cost function
+            xLo: Estimates of states at end of horizon window estimated at previous discrete time
+            pLo: Estimates of parameters estimated at previous discrete time
+            xLb: Value of $ar{x}_L$ to be used for arrival cost update
+            pLb: Value of $ar{p}_L$ to be used for arrival cost update
+            PL: Weight for arrival cost from previous discrete time
+            u: Control input at the end of horizon window
+            yL: Measurement at the end of horizon window
+            VL: Weight for measurement term
+            WL: Weight for process term
+            Wp: Weight for parameter term
+        InName: Corresponding name of above input
+    
+        Out: Output symbolics returned by arrival cost function
+            xLbn: New value of $ar{x}_L$ to be used for arrival cost update
+            pLbn: New value of $ar{x}_L$ to be used for arrival cost update
+            PLn: New value of $ar{x}_L$ to be used for arrival cost update
+        OutName: Corresponding name of above output
+    
+    Above In, Out, InName and OutName can be unsed to create casadi Function which can be code generated.
+    
+    Note: When nP=0, Input/Output corresponding to parameters are not returned.
+
+    
+`simpleMHE(nX, nU, nY, nP, Fc, Hc, N, Ts, pLow, pUpp, arrival=False, GGN=False, Integrator='rk4', Options=None)`
 :   Function to generate simple MHE code using `qrqp` solver. For use with other advanced solver, see `MHE` class.
     
     Parameters

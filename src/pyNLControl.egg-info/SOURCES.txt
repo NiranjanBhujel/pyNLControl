@@ -16,6 +16,7 @@ src/pynlcontrol/external/qpOASES.zip
 src/pynlcontrol/templates/GenCode_c.j2
 src/pynlcontrol/templates/GenCode_h.j2
 src/pynlcontrol/templates/Gen_Mex_c.j2
+src/pynlcontrol/templates/MHE_DataCollect.j2
 src/pynlcontrol/templates/TestCode.j2
 src/pynlcontrol/templates/qpOASES_c.j2
 src/pynlcontrol/templates/qpOASES_h.j2

@@ -1,6 +1,7 @@
 # Filename:     QPInterface.py
 # Written by:   Niranjan Bhujel
 # Description:  Contains interface to qp solver. Currently, only qpOASES is supported.
+# TODO: To add interface to other solvers (qpDUNES)
 
 
 from pynlcontrol import BasicUtils
