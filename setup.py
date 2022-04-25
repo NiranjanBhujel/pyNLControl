@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="pyNLControl",
-    version="0.0.18",
+    version="0.0.19",
     author="Niranjan Bhujel",
     author_email="niranjan.bhujel2014@gmail.com",
     description="Package for non-linear control and estimation.",
