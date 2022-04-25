@@ -108,7 +108,7 @@ def KF(A, B, C, D, Qw, Rv, Ts, Integrator='rk4'):
     return [u, y, xp, Pp], [xhat, Phat], ['u', 'y', 'xhatp', 'Pkp'], ['xhat', 'Phat']
 
 
-def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
+def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, argF=[], argH=[], Integrator='rk4'):
     """
     Function to implement Extended Kalman filter (EKF).
 
@@ -130,6 +130,10 @@ def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
         Measurement noise covariance matrix
     Ts: (float)
         Sample time of the Kalman filter.
+    argF: (list)
+        List of external parameters to function F
+    argH: (list)
+        List of external parameters to function H
     Integrator: (str, optional)
         Integration method. Defaults to 'rk4'. For list of supported integrator, please see documentation of function `Integrate()`.
 
@@ -165,13 +169,13 @@ def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
 
     Pp = ca.SX.sym('Pp', nX, nX)
 
-    xkm = Integrate(F, Integrator, Ts, xp, u)
+    xkm = Integrate(F, Integrator, Ts, xp, u, *argF)
     Fk = ca.jacobian(xkm, xp)
 
     Pkm = Fk @ Pp @ ca.transpose(Fk) + Qw
-    yr = y - H(xkm)
+    yr = y - H(xkm, *argH)
 
-    Hk = ca.substitute(ca.jacobian(H(xp), xp), xp, xkm)
+    Hk = ca.substitute(ca.jacobian(H(xp, *argH), xp), xp, xkm)
 
     Sk = Hk @ Pkm @ ca.transpose(Hk) + Rv
     Kk = Pkm @ ca.transpose(Hk) @ ca.inv(Sk)
@@ -182,7 +186,7 @@ def EKF(nX, nU, nY, F, H, Qw, Rv, Ts, Integrator='rk4'):
     return [u, y, xp, Pp], [xhat, Phat], ['u', 'y', 'xhatp', 'Pkp'], ['xhat', 'Phat']
 
 
-def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-3, beta=2.0, kappa=0.0, Integrator='rk4'):
+def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, argF=[], argH=[], PCoeff=None, Wm=None, Wc=None, alpha=1.0e-3, beta=2.0, kappa=0.0, Integrator='rk4'):
     """
     Function to implement Unscented Kalman filter (UKF). 
 
@@ -206,6 +210,10 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-
         Measurement noise covariance matrix
     Ts: (float)
         Sample time of the Kalman filter.
+    argF: (list)
+        List of external parameters to function F
+    argH: (list)
+        List of external parameters to function H
     PCoeff: (float)
         Coefficient of covariance matrix (inside square root term) when calculating sigma points. Defaults to None
     Wm: (list, optional)
@@ -298,7 +306,7 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-
     Sxkm = ca.GenSX_zeros(Sx.shape)
 
     for i in range(2*nX+1):
-        Sxkm[:, i] = Integrate(F, Integrator, Ts, Sx[:, i], u)
+        Sxkm[:, i] = Integrate(F, Integrator, Ts, Sx[:, i], u, *argF)
 
     mukm = SigmaMean(Sxkm, Wm)
     Pkm = SigmaCovar(Sxkm, Sxkm, Wm, Wc) + Qw
@@ -306,7 +314,7 @@ def UKF(nX, nU, nY, F, H, Qw, Rv, Ts, PCoeff=None, Wm=None, Wc=None, alpha=1.0e-
     Sy = ca.GenSX_zeros(nY, 2*nX+1)
 
     for i in range(2*nX+1):
-        Sy[:, i] = H(Sxkm[:, i])
+        Sy[:, i] = H(Sxkm[:, i], *argH)
 
     ykm = SigmaMean(Sy, Wm)
     Sk = SigmaCovar(Sy, Sy, Wm, Wc) + Rv
