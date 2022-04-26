@@ -1,0 +1,30 @@
+% MATLAB function to collct past data of horizon N
+function [uarr, yarr, ul, yl] = DataCollect(u, y)
+    N={{N}};
+
+    nu={{nU}};
+    ny={{nY}};
+
+    persistent yData uData;
+    if isempty(uData)
+        yData = zeros(ny, N+1);
+        uData = zeros(nu, N);
+    end
+
+    ul = uData(:, 1);
+    yl = yData(:, 1);
+
+    for k=1:N
+        yData(:,k) = yData(:,k+1);
+    end
+
+    for k=1:N-1
+        uData(:,k) = uData(:,k+1);
+    end
+
+    yData(:,N+1) = y;
+    uData(:, N) = u;
+
+    uarr = uData;
+    yarr = yData;
+end
