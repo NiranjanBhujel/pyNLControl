@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pyNLControl
-Version: 0.0.17
+Version: 0.0.18
 Summary: Package for non-linear control and estimation.
 Home-page: https://github.com/NiranjanBhujel/pyNLControl
 Author: Niranjan Bhujel
