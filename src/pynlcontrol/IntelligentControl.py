@@ -135,10 +135,10 @@ class DDPG:
         batch_size : int, optional
             Batch size to randomly sample data to train network, by default 64
         """
-        self.actor_model = actor_model
-        self.critic_model = critic_model
-        self.actor_target = keras.models.clone_model(self.actor_model)
-        self.critic_target = keras.models.clone_model(self.critic_model)
+        self.actor_model = keras.models.clone_model(actor_model)
+        self.critic_model = keras.models.clone_model(critic_model)
+        self.actor_target = keras.models.clone_model(actor_model)
+        self.critic_target = keras.models.clone_model(critic_model)
 
         self.num_states = num_states
         self.num_controls = num_controls
@@ -190,8 +190,9 @@ class DDPG:
                 [next_state_batch, target_controls], training=True
             )
 
-            critic_value = self.critic_model([state_batch, control_batch])
+            critic_value = self.critic_model([state_batch, control_batch], training=True)
             critic_loss = tf.math.reduce_mean(tf.math.square(y - critic_value))
+
         critic_grad = tape.gradient(
             critic_loss, self.critic_model.trainable_variables)
         self.critic_optimizer.apply_gradients(
@@ -270,7 +271,7 @@ class DDPG:
                         action = np.array(action)
                     action = action.flatten()
 
-                state, cost, done, info = env.step(action)
+                state, cost, done, _ = env.step(action)
 
                 if count == slow_factor:
                     ep_cost.append(cost)
