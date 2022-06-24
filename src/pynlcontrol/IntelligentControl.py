@@ -250,7 +250,7 @@ class DDPG:
         slow_factor = int(Ts/env_Ts)
 
         ep_cost_list = []
-        for _ in tqdm(range(total_episodes)):
+        for _1 in tqdm(range(total_episodes)):
             prev_state = env.reset()
             count = slow_factor
             ep_cost = []
@@ -258,29 +258,24 @@ class DDPG:
                 tf_prev_state = tf.expand_dims(
                     tf.convert_to_tensor(prev_state, dtype=tf.float32), 0)
 
-                if count == slow_factor:
-                    action = self.actor_model(
-                        tf_prev_state) + random_process.step()
-                    if lower_bounds is not None and upper_bounds is not None:
-                        action = np.clip(action, lower_bounds, upper_bounds)
-                    elif lower_bounds is not None and upper_bounds is None:
-                        action = np.clip(action, lower_bounds, np.inf)
-                    elif lower_bounds is None and upper_bounds is not None:
-                        action = np.clip(action, -np.inf, upper_bounds)
-                    else:
-                        action = np.array(action)
-                    action = action.flatten()
-
-                state, cost, done, _ = env.step(action)
-
-                if count == slow_factor:
-                    ep_cost.append(cost)
-                    self.train(np.array([prev_state]),
-                               action, cost, np.array([state]), done)
-                    count = 1
-
+                action = self.actor_model(
+                    tf_prev_state) + random_process.step()
+                if lower_bounds is not None and upper_bounds is not None:
+                    action = np.clip(action, lower_bounds, upper_bounds)
+                elif lower_bounds is not None and upper_bounds is None:
+                    action = np.clip(action, lower_bounds, np.inf)
+                elif lower_bounds is None and upper_bounds is not None:
+                    action = np.clip(action, -np.inf, upper_bounds)
                 else:
-                    count += 1
+                    action = np.array(action)
+                action = action.flatten()
+
+                for _2 in range(slow_factor):
+                    state, cost, done, info = env.step(action)
+
+                ep_cost.append(cost)
+                self.train(np.array([prev_state]),
+                            action, cost, np.array([state]), done)
 
                 if done:
                     break
