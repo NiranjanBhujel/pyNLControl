@@ -7,7 +7,7 @@ from tqdm import tqdm
 class Buffer:
     def __init__(self, var_size: list, buffer_capacity: int, batch_size: int) -> None:
         """
-        Creates buffer object to store states, actions, etc information.
+        Creates buffer object to store states, controls, etc information.
 
         Buffer class to store data. The buffer can be used to train neural network for reinforcement learning based algorithm.
 
@@ -67,7 +67,7 @@ class Buffer:
         return data_out
 
 
-class OUActionNoise:
+class OUControlNoise:
     def __init__(self, mean, std_deviation, theta=0.15, dt=1e-2, x_initial=None):
         """
         Class to create Ornstein-Uhlenbeck process. Link: https://en.wikipedia.org/wiki/Ornstein%E2%80%93Uhlenbeck_process 
@@ -108,7 +108,7 @@ class OUActionNoise:
 
 
 class DDPG:
-    def __init__(self, num_states, num_controls, actor_model, critic_model, actor_optimizer, critic_optimizer, gamma=0.99, tau=0.005, buffer_capacity=100000, batch_size=64) -> None:
+    def __init__(self, num_states, num_controls, actor_model, critic_model, actor_optimizer, critic_optimizer, gamma=0.99, tau=0.005, buffer_capacity=100000, batch_size=64, epochs=10) -> None:
         """
         Class for deep deterministic policy gradient (DDPG) approach for reinforcement learning.
 
@@ -152,7 +152,9 @@ class DDPG:
         self.buffer = Buffer(var_size=[num_states, num_controls, 1, num_states, 1],
                              buffer_capacity=buffer_capacity, batch_size=batch_size)
 
-    def train(self, state, control, stage_cost, next_state, done):
+        self.epochs = epochs
+
+    def train(self, state, control, stage_cost, next_state, done, epochs):
         """
         Function to train actor and critic network by providing data. 
         Note: This function does not call the environment. Simulation of environment has to be done by user and data ave to be passed to call this function.
@@ -174,8 +176,9 @@ class DDPG:
 
         state_batch, control_batch, cost_batch, next_state_batch, done_batch = self.buffer.get_batch()
 
-        self.__learn_actor_critic(
-            state_batch, control_batch, cost_batch, next_state_batch, done_batch)
+        for _ in range(epochs):
+            self.__learn_actor_critic(
+                state_batch, control_batch, cost_batch, next_state_batch, done_batch)
 
         self.__update_target()
 
@@ -183,6 +186,7 @@ class DDPG:
     def __learn_actor_critic(self, state_batch, control_batch, cost_batch, next_state_batch, done_batch):
         # Update critic
         with tf.GradientTape() as tape:
+            tape.watch(self.critic_model.trainable_variables)
             target_controls = self.actor_target(
                 next_state_batch, training=True)
 
@@ -190,7 +194,8 @@ class DDPG:
                 [next_state_batch, target_controls], training=True
             )
 
-            critic_value = self.critic_model([state_batch, control_batch], training=True)
+            critic_value = self.critic_model(
+                [state_batch, control_batch], training=True)
             critic_loss = tf.math.reduce_mean(tf.math.square(y - critic_value))
 
         critic_grad = tape.gradient(
@@ -201,6 +206,7 @@ class DDPG:
 
         # Update actor
         with tf.GradientTape() as tape:
+            tape.watch(self.actor_model.trainable_variables)
             controls = self.actor_model(state_batch, training=True)
             critic_value = self.critic_model(
                 [state_batch, controls], training=True)
@@ -212,6 +218,8 @@ class DDPG:
         self.actor_optimizer.apply_gradients(
             zip(actor_grad, self.actor_model.trainable_variables))
 
+        return critic_loss, actor_loss
+
     @tf.function
     def __update_target(self):
         for (a, b) in zip(self.actor_target.variables, self.actor_model.variables):
@@ -220,7 +228,7 @@ class DDPG:
         for (a, b) in zip(self.critic_target.variables, self.critic_model.variables):
             a.assign(b * self.tau + a * (1 - self.tau))
 
-    def train_sim(self, env_info, Ts, random_process, lower_bounds=None, upper_bounds=None, total_episodes=100):
+    def train_sim(self, env_info, Ts, random_process, lower_bounds=None, upper_bounds=None, update_after=0, update_every=1, total_episodes=100):
         """
         Function to train actor and critic network. This function automatically calls environment. 
 
@@ -234,9 +242,9 @@ class DDPG:
         random_process : any random process
             Random process with number of variables as same as number of controls
         lower_bounds : float or numpy.array, optional
-            Lower bound on control action, by default None
+            Lower bound on control control, by default None
         upper_bounds : float or numpy.array, optional
-            Upper bound on control action, by default None
+            Upper bound on control control, by default None
         total_episodes : int, optional
             Total number of episodes to be used to train, by default 100
 
@@ -250,38 +258,56 @@ class DDPG:
         slow_factor = int(Ts/env_Ts)
 
         ep_cost_list = []
+        critic_loss_list = []
+        actor_loss_list = []
         for _1 in tqdm(range(total_episodes)):
             prev_state = env.reset()
-            count = slow_factor
             ep_cost = []
+            critic_loss = []
+            actor_loss = []
+            count = 0
             while True:
                 tf_prev_state = tf.expand_dims(
                     tf.convert_to_tensor(prev_state, dtype=tf.float32), 0)
 
-                action = self.actor_model(
+                control = self.actor_model(
                     tf_prev_state) + random_process.step()
                 if lower_bounds is not None and upper_bounds is not None:
-                    action = np.clip(action, lower_bounds, upper_bounds)
+                    control = np.clip(control, lower_bounds, upper_bounds)
                 elif lower_bounds is not None and upper_bounds is None:
-                    action = np.clip(action, lower_bounds, np.inf)
+                    control = np.clip(control, lower_bounds, np.inf)
                 elif lower_bounds is None and upper_bounds is not None:
-                    action = np.clip(action, -np.inf, upper_bounds)
+                    control = np.clip(control, -np.inf, upper_bounds)
                 else:
-                    action = np.array(action)
-                action = action.flatten()
+                    control = np.array(control)
+                control = control.flatten()
 
                 for _2 in range(slow_factor):
-                    state, cost, done, info = env.step(action)
+                    state, cost, done, info = env.step(control)
 
-                ep_cost.append(cost)
-                self.train(np.array([prev_state]),
-                            action, cost, np.array([state]), done)
+                self.buffer.record(
+                    (np.array([prev_state]), control, cost, state, done))
+
+                if count >= update_after:
+                    if count % update_every == 0:
+                        state_batch, control_batch, cost_batch, next_state_batch, done_batch = self.buffer.get_batch()
+                        for _ in range(self.epochs):
+                            loss1, loss2 = self.__learn_actor_critic(
+                                state_batch, control_batch, cost_batch, next_state_batch, done_batch)
+                            self.__update_target()
+
+                        ep_cost.append(cost)
+                        critic_loss.append(loss1)
+                        actor_loss.append(loss2)
 
                 if done:
                     break
 
                 prev_state = state
+                count += 1
 
             ep_cost_list.append(ep_cost.copy())
+            critic_loss_list.append(critic_loss.copy())
+            actor_loss_list.append(actor_loss.copy())
 
-        return np.array(ep_cost_list)
+        return np.array(ep_cost_list), np.array(critic_loss_list), np.array(actor_loss_list)
