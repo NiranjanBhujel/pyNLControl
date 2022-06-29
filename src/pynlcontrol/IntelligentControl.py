@@ -44,7 +44,8 @@ class Buffer:
         for k in range(len(self.var_size)):
             self.buffer_data[k][index, :] = data_tuple[k]
 
-        self.buffer_counter += 1
+        if self.buffer_counter < self.buffer_capacity:
+            self.buffer_counter += 1
 
     def get_batch(self):
         """
@@ -285,10 +286,8 @@ class DDPG:
                 for _2 in range(slow_factor):
                     state, cost, done, info = env.step(control)
 
-                self.buffer.record(
-                    (np.array([prev_state]), control, cost, state, done))
-
                 if count >= update_after:
+                    self.buffer.record((np.array([prev_state]), control, cost, state, done))
                     if count % update_every == 0:
                         state_batch, control_batch, cost_batch, next_state_batch, done_batch = self.buffer.get_batch()
                         for _ in range(self.epochs):
