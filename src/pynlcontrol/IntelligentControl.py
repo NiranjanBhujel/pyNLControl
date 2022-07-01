@@ -109,7 +109,7 @@ class OUControlNoise:
 
 
 class DDPG:
-    def __init__(self, num_states, num_controls, actor_model, critic_model, actor_optimizer, critic_optimizer, gamma=0.99, tau=0.005, buffer_capacity=100000, batch_size=64, epochs=10) -> None:
+    def __init__(self, num_states, num_controls, actor_model, critic_model, actor_optimizer, critic_optimizer, gamma=0.99, tau=0.005, buffer_capacity=100000, batch_size=64) -> None:
         """
         Class for deep deterministic policy gradient (DDPG) approach for reinforcement learning.
 
@@ -153,7 +153,6 @@ class DDPG:
         self.buffer = Buffer(var_size=[num_states, num_controls, 1, num_states, 1],
                              buffer_capacity=buffer_capacity, batch_size=batch_size)
 
-        self.epochs = epochs
 
     def train(self, state, control, stage_cost, next_state, done, epochs):
         """
@@ -229,7 +228,7 @@ class DDPG:
         for (a, b) in zip(self.critic_target.variables, self.critic_model.variables):
             a.assign(b * self.tau + a * (1 - self.tau))
 
-    def train_sim(self, env_info, Ts, random_process, lower_bounds=None, upper_bounds=None, update_after=0, update_every=1, total_episodes=100):
+    def train_sim(self, env_info, Ts, random_process, lower_bounds=None, upper_bounds=None, update_after=0, update_every=1, epochs=10, total_episodes=100):
         """
         Function to train actor and critic network. This function automatically calls environment. 
 
@@ -246,6 +245,12 @@ class DDPG:
             Lower bound on control control, by default None
         upper_bounds : float or numpy.array, optional
             Upper bound on control control, by default None
+        update_after : int, optional
+            Discrete time after which data recording and training starts
+        update_every : int, optional
+            Discrete time interal at which training is performed
+        epochs : int, optional
+            Total number of epochs to be used to train, by default 10
         total_episodes : int, optional
             Total number of episodes to be used to train, by default 100
 
@@ -271,8 +276,7 @@ class DDPG:
                 tf_prev_state = tf.expand_dims(
                     tf.convert_to_tensor(prev_state, dtype=tf.float32), 0)
 
-                control = self.actor_model(
-                    tf_prev_state) + random_process.step()
+                control = self.actor_model(tf_prev_state) + random_process.step()
                 if lower_bounds is not None and upper_bounds is not None:
                     control = np.clip(control, lower_bounds, upper_bounds)
                 elif lower_bounds is not None and upper_bounds is None:
@@ -290,7 +294,7 @@ class DDPG:
                     self.buffer.record((np.array([prev_state]), control, cost, state, done))
                     if count % update_every == 0:
                         state_batch, control_batch, cost_batch, next_state_batch, done_batch = self.buffer.get_batch()
-                        for _ in range(self.epochs):
+                        for _ in range(epochs):
                             loss1, loss2 = self.__learn_actor_critic(
                                 state_batch, control_batch, cost_batch, next_state_batch, done_batch)
                             self.__update_target()
