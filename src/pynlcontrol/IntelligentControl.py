@@ -228,7 +228,7 @@ class DDPG:
         for (a, b) in zip(self.critic_target.variables, self.critic_model.variables):
             a.assign(b * self.tau + a * (1 - self.tau))
 
-    def train_sim(self, env_info, Ts, random_process, lower_bounds=None, upper_bounds=None, update_after=0, update_every=1, epochs=10, total_episodes=100):
+    def train_sim(self, env_info, Ts, random_process, policy, lower_bounds=None, upper_bounds=None, update_after=0, update_every=1, epochs=10, total_episodes=100):
         """
         Function to train actor and critic network. This function automatically calls environment. 
 
@@ -245,6 +245,8 @@ class DDPG:
             Lower bound on control control, by default None
         upper_bounds : float or numpy.array, optional
             Upper bound on control control, by default None
+        policy : function
+            Policy function that takes state, actor network, lower bound and upper bound as argument.
         update_after : int, optional
             Discrete time after which data recording and training starts
         update_every : int, optional
@@ -276,7 +278,7 @@ class DDPG:
                 tf_prev_state = tf.expand_dims(
                     tf.convert_to_tensor(prev_state, dtype=tf.float32), 0)
 
-                control = self.actor_model(tf_prev_state) + random_process.step()
+                control = policy(tf_prev_state, self.actor_model, lower_bounds, upper_bounds) + random_process.step()
                 if lower_bounds is not None and upper_bounds is not None:
                     control = np.clip(control, lower_bounds, upper_bounds)
                 elif lower_bounds is not None and upper_bounds is None:
